@@ -1,4 +1,4 @@
-/* Rich Music - backend proxy for YouTube Music InnerTube API + LRCLIB lyrics */
+/* Fesify - backend proxy for YouTube Music InnerTube API + LRCLIB lyrics */
 const express = require('express');
 const path = require('path');
 
@@ -864,6 +864,6 @@ app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html'))
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', () => console.log(`Rich Music running on :${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`Fesify running on :${PORT}`));
 }
 module.exports = app;
