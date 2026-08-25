@@ -104,24 +104,14 @@ a { color: inherit; }
   display: flex; flex-direction: column; align-items: center;
 }
 .splash-logo {
-  width: 240px; height: 240px; max-width: 80vw; max-height: 80vh; object-fit: contain;
+  width: 140px; height: 140px; max-width: 60vw; max-height: 60vh; object-fit: contain;
   animation: splashLogo 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
-  filter: drop-shadow(0 0 45px rgba(30, 215, 96, 0.45));
-}
-.splash-name {
-  margin-top: 18px;
-  font-size: 28px; font-weight: 800; letter-spacing: -0.05em;
-  color: #fff;
-  animation: splashName 0.8s 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  filter: drop-shadow(0 0 50px rgba(30, 215, 96, 0.55));
 }
 @keyframes splashLogo {
   0% { opacity: 0; transform: scale(0.72); }
   70% { opacity: 1; transform: scale(1.04); }
   100% { opacity: 1; transform: scale(1); }
-}
-@keyframes splashName {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .splash-logo, .splash-name { animation: none; }
