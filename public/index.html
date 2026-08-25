@@ -62,9 +62,10 @@ try {
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M10 3v10.6a3.5 3.5 0 1 0 2 3.2V7h6V3h-8z"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><path d="M12 7.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM1 11h3v2H1v-2zm19 0h3v2h-3v-2zM4.2 3.8l1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1zM3.8 19.8l2.1-2.1 1.4 1.4-2.1 2.1-1.4-1.4zm12.1-12.1 2.1-2.1 1.4 1.4-2.1 2.1-1.4-1.4z"/></symbol>
-  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M15.2 2.1A9.8 9.8 0 1 0 21.9 15 8 8 0 0 1 15.2 2.1z"/></symbol>
-  <symbol id="i-pip" viewBox="0 0 24 24"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h15A1.5 1.5 0 0 1 21 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-15zM5 5v14h14V5H5zm7 6h6v6h-6v-6z"/></symbol>
-  <symbol id="i-share" viewBox="0 0 24 24"><path d="M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14V4zM5 7h7v2H7v8h8v-4h2v6H5V7z"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 2L14.5 8.5L21 11L14.5 13.5L12 20L9.5 13.5L3 11L9.5 8.5L12 2Z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-spotify" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.58 14.42c-.18.3-.54.4-.84.22-2.3-1.4-5.2-1.72-8.62-.94-.34.08-.68-.14-.76-.48-.08-.34.14-.68.48-.76 3.76-.86 6.98-.48 9.52 1.08.3.18.4.56.22.88zm1.22-2.72c-.22.36-.68.48-1.04.26-2.64-1.62-6.66-2.1-9.78-1.14-.4.12-.84-.1-.96-.5-.12-.4.1-.84.5-.96 3.56-1.08 8-.56 11.02 1.3.36.22.48.68.26 1.04zm.12-2.84C14.78 8.8 9.56 8.62 6.54 9.54c-.48.14-1-.12-1.14-.6-.14-.48.12-1 .6-1.14 3.5-1.06 9.24-.86 13 1.38.44.26.58.84.32 1.28-.26.42-.84.56-1.4.38z"/></symbol>
 </svg>
 
 <div id="app">
@@ -107,6 +108,8 @@ try {
         <span>What do you want to play?</span>
       </button>
       <div class="tb-actions">
+        <button id="tb-room" class="tb-btn" title="Listen Together (Live Sync)"><svg class="ic"><use href="#i-users"/></svg></button>
+        <button id="tb-eq" class="tb-btn" title="Equalizer & Audio FX"><svg class="ic"><use href="#i-sliders"/></svg></button>
         <button id="theme-toggle" class="tb-btn" title="Toggle theme">
           <svg class="ic" id="theme-ic"><use href="#i-sun"/></svg>
         </button>
@@ -193,6 +196,9 @@ try {
             <button id="np-like" class="pill-btn"><svg class="ic"><use href="#i-heart-o"/></svg><span>Favorite</span></button>
             <button id="np-addpl" class="pill-btn"><svg class="ic"><use href="#i-plus"/></svg><span>Playlist</span></button>
             <button id="np-more" class="pill-btn" title="More"><svg class="ic"><use href="#i-more"/></svg><span>More</span></button>
+            <button id="np-story" class="pill-btn np-extra" title="Create Instagram Story Card"><svg class="ic"><use href="#i-sparkle"/></svg><span>Story Card</span></button>
+            <button id="np-eq" class="pill-btn np-extra" title="Equalizer & 8D Spatial"><svg class="ic"><use href="#i-sliders"/></svg><span>EQ</span></button>
+            <button id="np-room" class="pill-btn np-extra" title="Listen Together (Live Sync)"><svg class="ic"><use href="#i-users"/></svg><span>Live Room</span></button>
             <button id="np-download" class="pill-btn np-extra" title="Download"><svg class="ic"><use href="#i-download"/></svg><span>Download</span></button>
             <button id="np-share" class="pill-btn np-extra" title="Share"><svg class="ic"><use href="#i-share"/></svg><span>Share</span></button>
             <button id="np-speed" class="pill-btn np-extra" title="Playback speed"><svg class="ic"><use href="#i-clock"/></svg><span>1×</span></button>
@@ -226,6 +232,145 @@ try {
     </div>
   </div>
 
+  <!-- 1. Instagram Story Card Generator Modal -->
+  <div id="modal-story" class="hidden modal-overlay">
+    <div class="modal-card story-card-modal">
+      <div class="modal-header-row">
+        <h3>Instagram Story Card</h3>
+        <button class="icon-btn btn-modal-close" data-close-modal="modal-story"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="story-preview-wrapper">
+        <canvas id="story-canvas" width="1080" height="1920"></canvas>
+      </div>
+      <div class="story-options-row">
+        <div class="story-theme-pills">
+          <button class="pill-btn active" data-story-theme="dark">Obsidian</button>
+          <button class="pill-btn" data-story-theme="emerald">Emerald Glow</button>
+          <button class="pill-btn" data-story-theme="sunset">Cyberpunk</button>
+          <button class="pill-btn" data-story-theme="glass">Liquid Glass</button>
+        </div>
+        <label class="story-lyric-toggle">
+          <input type="checkbox" id="story-toggle-lyric" checked />
+          <span>Include Active Lyrics</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-download-story" class="pill-btn active"><svg class="ic"><use href="#i-download"/></svg> Download Story Card (PNG)</button>
+        <button id="btn-copy-story-link" class="pill-btn"><svg class="ic"><use href="#i-share"/></svg> Copy Direct Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Spotify Playlist Importer Modal -->
+  <div id="modal-spotify" class="hidden modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header-row">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg class="ic" style="color:#1db954;"><use href="#i-spotify"/></svg>
+          <h3>Import Spotify Playlist</h3>
+        </div>
+        <button class="icon-btn btn-modal-close" data-close-modal="modal-spotify"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin:8px 0 14px;">Paste link playlist atau album Spotify publik kamu untuk dipindahkan langsung ke Library Fesify.</p>
+      <input type="text" id="spotify-import-input" class="modal-text-input" placeholder="https://open.spotify.com/playlist/..." />
+      <div id="spotify-import-status" class="import-status-box hidden"></div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button id="btn-run-spotify-import" class="pill-btn active">Mulai Import</button>
+        <button class="pill-btn btn-modal-close" data-close-modal="modal-spotify">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Equalizer & 8D Spatial Audio Modal -->
+  <div id="modal-eq" class="hidden modal-overlay">
+    <div class="modal-card eq-modal-card">
+      <div class="modal-header-row">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg class="ic"><use href="#i-sliders"/></svg>
+          <h3>Equalizer & Studio Audio FX</h3>
+        </div>
+        <button class="icon-btn btn-modal-close" data-close-modal="modal-eq"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="eq-presets-row">
+        <button class="pill-btn active" data-eq-preset="flat">Flat</button>
+        <button class="pill-btn" data-eq-preset="bass">Bass Boost</button>
+        <button class="pill-btn" data-eq-preset="vocal">Vocal Booster</button>
+        <button class="pill-btn" data-eq-preset="treble">Treble Crisp</button>
+        <button class="pill-btn" data-eq-preset="club">Electronic</button>
+      </div>
+      <div class="eq-sliders-grid">
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b60" min="-12" max="12" value="0" />
+          <span>60Hz</span>
+        </div>
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b250" min="-12" max="12" value="0" />
+          <span>250Hz</span>
+        </div>
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b1k" min="-12" max="12" value="0" />
+          <span>1kHz</span>
+        </div>
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b4k" min="-12" max="12" value="0" />
+          <span>4kHz</span>
+        </div>
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b8k" min="-12" max="12" value="0" />
+          <span>8kHz</span>
+        </div>
+        <div class="eq-band-col">
+          <input type="range" class="eq-v-slider" id="eq-b16k" min="-12" max="12" value="0" />
+          <span>16kHz</span>
+        </div>
+      </div>
+      <div class="eq-extra-fx-row">
+        <label class="eq-toggle-chip">
+          <input type="checkbox" id="eq-toggle-spatial" />
+          <span>8D Spatial Concert Simulator</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="pill-btn btn-modal-close" data-close-modal="modal-eq">Selesai</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Listen Together Room Modal -->
+  <div id="modal-room" class="hidden modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header-row">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg class="ic" style="color:var(--accent);"><use href="#i-users"/></svg>
+          <h3>Listen Together (Live Sync)</h3>
+        </div>
+        <button class="icon-btn btn-modal-close" data-close-modal="modal-room"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div id="room-active-status" class="room-status-badge hidden">
+        <span class="live-dot"></span>
+        <span id="room-status-text">Connected to Room: <b>—</b></span>
+        <button id="btn-leave-room" class="pill-btn sm">Leave</button>
+      </div>
+      <div class="room-action-tabs">
+        <div style="margin-bottom:16px;">
+          <h4 style="font-size:13px;margin-bottom:6px;">Host Listening Party</h4>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Buat room siaran musik langsung dan bagikan ke teman/Story IG kamu.</p>
+          <button id="btn-create-room" class="pill-btn active">Buat Room Baru</button>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <h4 style="font-size:13px;margin-bottom:6px;">Gabung Room Teman</h4>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="join-room-input" class="modal-text-input" placeholder="Kode Room (misal: HT8QHW)" style="text-transform:uppercase;" />
+            <button id="btn-join-room" class="pill-btn">Gabung</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="pill-btn btn-modal-close" data-close-modal="modal-room">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="hidden"></div>
 
   <!-- Floating mini widget (in-page fallback; also cloned into Document PiP) -->
@@ -250,6 +395,13 @@ try {
   <canvas id="pip-canvas" width="360" height="640"></canvas>
   <video id="pip-video" muted playsinline autoplay></video>
 </div>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
 <script src="app.js"></script>
 </body>
 </html>

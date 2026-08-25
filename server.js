@@ -837,27 +837,182 @@ app.get('/api/lyrics', async (req, res) => {
 });
 
 
-/* album-art proxy so the PiP canvas is not CORS-tainted */
-app.get('/api/thumb', async (req, res) => {
+/* ==========================================================================
+   Fesify Flagship Enhancements: Spotify Importer & Listen Together Rooms
+   ========================================================================== */
+
+/* Spotify Playlist / Album Importer */
+app.get('/api/import/spotify', async (req, res) => {
   try {
-    const raw = String(req.query.url || '');
-    const u = new URL(raw);
-    const host = u.hostname;
-    const ok =
-      host.endsWith('ytimg.com') ||
-      host.endsWith('ggpht.com') ||
-      host.endsWith('googleusercontent.com');
-    if (!ok) return res.status(400).end();
-    const r = await fetch(raw, {
-      headers: { 'User-Agent': 'Mozilla/5.0 RichMusicThumb/1.0', Accept: 'image/*' },
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) return res.status(400).json({ error: 'URL Spotify diperlukan' });
+
+    let playlistId = rawUrl;
+    let type = 'playlist';
+
+    const matchPl = rawUrl.match(/playlist[\/:]([a-zA-Z0-9]+)/);
+    const matchAlb = rawUrl.match(/album[\/:]([a-zA-Z0-9]+)/);
+
+    if (matchPl) {
+      playlistId = matchPl[1];
+      type = 'playlist';
+    } else if (matchAlb) {
+      playlistId = matchAlb[1];
+      type = 'album';
+    } else if (rawUrl.includes(':')) {
+      playlistId = rawUrl.split(':').pop();
+    }
+
+    const embedUrl = `https://open.spotify.com/embed/${type}/${playlistId}`;
+    const r = await fetch(embedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
     });
-    if (!r.ok) return res.status(502).end();
-    res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(Buffer.from(await r.arrayBuffer()));
-  } catch {
-    res.status(500).end();
+
+    if (!r.ok) return res.status(404).json({ error: 'Playlist Spotify tidak ditemukan atau private' });
+    const html = await r.text();
+
+    const idx = html.indexOf('__NEXT_DATA__');
+    if (idx === -1) return res.status(500).json({ error: 'Gagal mengekstrak data Spotify' });
+
+    const start = html.indexOf('>', idx) + 1;
+    const end = html.indexOf('</script>', start);
+    const data = JSON.parse(html.slice(start, end));
+    const entity = data.props?.pageProps?.state?.data?.entity;
+
+    if (!entity) return res.status(404).json({ error: 'Data playlist kosong' });
+
+    const name = entity.name || entity.title || 'Spotify Playlist';
+    const cover = entity.coverArt?.sources?.[0]?.url || null;
+    const rawTracks = entity.trackList || [];
+
+    // Parallel match top 25 tracks to YouTube Music
+    const tracksToMatch = rawTracks.slice(0, 25);
+    const matchedTracks = await Promise.all(
+      tracksToMatch.map(async (t) => {
+        try {
+          const q = `${t.title} ${t.subtitle || ''}`.trim();
+          const d = await yt('search', { query: q, params: SEARCH_PARAMS.songs });
+          const items = findAll(d, 'musicResponsiveListItemRenderer')
+            .map((c) => parseListItem(c))
+            .filter((x) => x && x.videoId);
+
+          if (items.length > 0) {
+            const first = items[0];
+            return {
+              title: t.title,
+              artist: t.subtitle || first.artist || first.subtitle,
+              videoId: first.videoId,
+              thumbnail: first.thumbnail || cover,
+              duration: first.duration || normalizeDuration(Math.round((t.duration || 0) / 1000) + 's'),
+            };
+          }
+        } catch {}
+        return null;
+      })
+    );
+
+    const validTracks = matchedTracks.filter(Boolean);
+    res.json({
+      name,
+      cover,
+      totalSpotifyTracks: rawTracks.length,
+      matchedCount: validTracks.length,
+      tracks: validTracks,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
+});
+
+/* Listen Together Live Sync Rooms */
+const activeRooms = new Map();
+
+app.post('/api/room/create', (req, res) => {
+  const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const hostKey = Math.random().toString(36).substring(2, 12);
+  const roomData = {
+    roomId,
+    hostKey,
+    createdAt: Date.now(),
+    currentTrack: null,
+    currentTime: 0,
+    isPlaying: false,
+    updatedAt: Date.now(),
+    listeners: new Set(),
+  };
+  activeRooms.set(roomId, roomData);
+  res.json({ roomId, hostKey });
+});
+
+app.get('/api/room/:roomId/state', (req, res) => {
+  const room = activeRooms.get(req.params.roomId.toUpperCase());
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  res.json({
+    roomId: room.roomId,
+    currentTrack: room.currentTrack,
+    currentTime: room.currentTime,
+    isPlaying: room.isPlaying,
+    updatedAt: room.updatedAt,
+    listenerCount: room.listeners.size + 1,
+  });
+});
+
+app.post('/api/room/:roomId/sync', (req, res) => {
+  const room = activeRooms.get(req.params.roomId.toUpperCase());
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+
+  const { currentTrack, currentTime, isPlaying } = req.body;
+  if (currentTrack !== undefined) room.currentTrack = currentTrack;
+  if (currentTime !== undefined) room.currentTime = currentTime;
+  if (isPlaying !== undefined) room.isPlaying = isPlaying;
+  room.updatedAt = Date.now();
+
+  // Broadcast to SSE clients
+  const payload = `data: ${JSON.stringify({
+    currentTrack: room.currentTrack,
+    currentTime: room.currentTime,
+    isPlaying: room.isPlaying,
+    updatedAt: room.updatedAt,
+  })}\n\n`;
+
+  for (const client of room.listeners) {
+    try {
+      client.write(payload);
+    } catch {
+      room.listeners.delete(client);
+    }
+  }
+
+  res.json({ success: true });
+});
+
+app.get('/api/room/:roomId/events', (req, res) => {
+  const room = activeRooms.get(req.params.roomId.toUpperCase());
+  if (!room) return res.status(404).end();
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  room.listeners.add(res);
+
+  // Send initial state
+  res.write(
+    `data: ${JSON.stringify({
+      currentTrack: room.currentTrack,
+      currentTime: room.currentTime,
+      isPlaying: room.isPlaying,
+      updatedAt: room.updatedAt,
+    })}\n\n`
+  );
+
+  req.on('close', () => {
+    room.listeners.delete(res);
+  });
 });
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

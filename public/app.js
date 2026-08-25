@@ -1764,20 +1764,23 @@ function viewLibrary(view, tab) {
     const pls = Library.playlists;
     body = `<div class="lib-actions">
         <button class="pill-btn primary" id="btn-newpl">${icon('i-plus')}<span>New playlist</span></button>
-        <button class="pill-btn" id="btn-import">${icon('i-download')}<span>Import from YT Music</span></button>
+        <button class="pill-btn" id="btn-import-spotify" style="color:#1ed760;border-color:rgba(30,215,96,0.3);">${icon('i-spotify')}<span>Import Spotify</span></button>
+        <button class="pill-btn" id="btn-import">${icon('i-download')}<span>Import YT Music</span></button>
         <button class="pill-btn" id="btn-backup">${icon('i-download')}<span>Backup</span></button>
         <button class="pill-btn" id="btn-restore">${icon('i-upload')}<span>Restore</span></button>
       </div>`;
     const cards = (Library.favorites.length ? likedCardHTML() : '') + pls.map((p) => `<div class="card" data-pl="${p.id}"><div class="art">${coverHTML(p.tracks[0] && p.tracks[0].thumbnail)}<div class="play-ov">${icon('i-play')}</div></div><div class="t">${esc(p.name)}</div><div class="s">${p.tracks.length} songs</div></div>`).join('');
     body += cards
       ? `<div class="lib-grid">${cards}</div>`
-      : emptyHTML('No playlists yet', 'Use New playlist above, or import one from YouTube Music.', { ic: 'i-note' });
+      : emptyHTML('No playlists yet', 'Use New playlist above, or import one from Spotify/YouTube Music.', { ic: 'i-note' });
   }
   view.innerHTML = `<div class="page-title">Library</div>
     <div class="chip-row">${tabs.map(([id, l]) => `<button class="chip ${tab === id ? 'active' : ''}" onclick="location.hash='#/library/${id}'">${l}</button>`).join('')}</div>${body}`;
   bindItems(view);
   const np = $('#btn-newpl');
   if (np) np.addEventListener('click', openCreatePlaylist);
+  const spIm = $('#btn-import-spotify');
+  if (spIm) spIm.addEventListener('click', () => openSpotifyImportModal());
   const im = $('#btn-import');
   if (im) im.addEventListener('click', openImportForm);
   const bk = $('#btn-backup');
@@ -3080,3 +3083,541 @@ window.addEventListener('pagehide', persistQueue);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persistQueue(); });
 restoreQueue();
 route();
+
+/* ==========================================================================
+   Fesify Flagship Features: Story Card, Spotify Importer, EQ & Room Sync
+   ========================================================================== */
+
+/* 1. Modal Helper */
+function openModalById(id) {
+  const el = $(`#${id}`);
+  if (el) el.classList.remove('hidden');
+}
+function closeModalById(id) {
+  const el = $(`#${id}`);
+  if (el) el.classList.add('hidden');
+}
+$$('.btn-modal-close').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.closeModal;
+    if (target) closeModalById(target);
+  });
+});
+$$('.modal-overlay').forEach((overlay) => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.add('hidden');
+  });
+});
+
+/* 2. Instagram Story Card Generator */
+let currentStoryTheme = 'dark';
+
+function openStoryModal() {
+  const song = focusedSong() || Player.current;
+  if (!song) {
+    toast('Play a song first to create a Story Card');
+    return;
+  }
+  openModalById('modal-story');
+  renderStoryCard(song);
+}
+
+async function renderStoryCard(song) {
+  const canvas = $('#story-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = 1080;
+  const h = 1920;
+
+  // Background Gradients
+  if (currentStoryTheme === 'emerald') {
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#0a3d1c');
+    grad.addColorStop(0.5, '#051f0e');
+    grad.addColorStop(1, '#000000');
+    ctx.fillStyle = grad;
+  } else if (currentStoryTheme === 'sunset') {
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#3b0764');
+    grad.addColorStop(0.5, '#1e1b4b');
+    grad.addColorStop(1, '#020617');
+    ctx.fillStyle = grad;
+  } else if (currentStoryTheme === 'glass') {
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#1e293b');
+    grad.addColorStop(0.5, '#0f172a');
+    grad.addColorStop(1, '#020617');
+    ctx.fillStyle = grad;
+  } else {
+    // Obsidian Dark
+    const grad = ctx.createRadialGradient(w / 2, 600, 50, w / 2, 600, 900);
+    grad.addColorStop(0, '#14251a');
+    grad.addColorStop(0.7, '#070908');
+    grad.addColorStop(1, '#000000');
+    ctx.fillStyle = grad;
+  }
+  ctx.fillRect(0, 0, w, h);
+
+  // Top Fesify Brandmark
+  ctx.save();
+  const brandImg = new Image();
+  brandImg.crossOrigin = 'anonymous';
+  brandImg.src = '/logo-wave.png';
+  await new Promise((res) => { brandImg.onload = res; brandImg.onerror = res; });
+  if (brandImg.complete && brandImg.naturalWidth) {
+    ctx.drawImage(brandImg, 80, 100, 80, 52);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 48px Figtree, sans-serif';
+  ctx.fillText('Fesify', 180, 142);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.font = '600 32px Figtree, sans-serif';
+  ctx.fillText('NOW STREAMING', 80, 230);
+  ctx.restore();
+
+  // Album Artwork with soft drop shadow
+  const artImg = new Image();
+  artImg.crossOrigin = 'anonymous';
+  artImg.src = `/api/thumb?url=${encodeURIComponent(song.thumbnail || '')}`;
+  await new Promise((res) => { artImg.onload = res; artImg.onerror = res; });
+
+  const artSize = 800;
+  const artX = (w - artSize) / 2;
+  const artY = 320;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 60;
+  ctx.shadowOffsetY = 24;
+
+  // Clip rounded rectangle
+  ctx.beginPath();
+  const radius = 40;
+  ctx.moveTo(artX + radius, artY);
+  ctx.lineTo(artX + artSize - radius, artY);
+  ctx.quadraticCurveTo(artX + artSize, artY, artX + artSize, artY + radius);
+  ctx.lineTo(artX + artSize, artY + artSize - radius);
+  ctx.quadraticCurveTo(artX + artSize, artY + artSize, artX + artSize - radius, artY + artSize);
+  ctx.lineTo(artX + radius, artY + artSize);
+  ctx.quadraticCurveTo(artX, artY + artSize, artX, artY + artSize - radius);
+  ctx.lineTo(artX, artY + radius);
+  ctx.quadraticCurveTo(artX, artY, artX + radius, artY);
+  ctx.closePath();
+  ctx.clip();
+
+  if (artImg.complete && artImg.naturalWidth) {
+    ctx.drawImage(artImg, artX, artY, artSize, artSize);
+  } else {
+    ctx.fillStyle = '#181818';
+    ctx.fillRect(artX, artY, artSize, artSize);
+  }
+  ctx.restore();
+
+  // Title & Artist
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 64px Figtree, sans-serif';
+  const titleText = song.title || 'Untitled Track';
+  ctx.fillText(titleText.length > 25 ? titleText.slice(0, 23) + '…' : titleText, 140, 1220);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.font = '600 44px Figtree, sans-serif';
+  const artistText = song.artist || song.subtitle || 'Fesify Music';
+  ctx.fillText(artistText.length > 32 ? artistText.slice(0, 30) + '…' : artistText, 140, 1290);
+  ctx.restore();
+
+  // Highlighted Lyric Box
+  const includeLyrics = $('#story-toggle-lyric')?.checked;
+  if (includeLyrics) {
+    let lyricText = '“Music is the soundtrack of our lives”';
+    const curLine = $('.lyric-line.active');
+    if (curLine && curLine.textContent.trim()) {
+      lyricText = `“${curLine.textContent.trim()}”`;
+    }
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 3;
+    
+    ctx.beginPath();
+    ctx.roundRect(120, 1370, 840, 260, 28);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#1ed760';
+    ctx.font = '800 56px Figtree, sans-serif';
+    ctx.fillText('♫', 160, 1460);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 42px Figtree, sans-serif';
+    const words = lyricText.split(' ');
+    let line1 = '';
+    let line2 = '';
+    words.forEach((wrd) => {
+      if ((line1 + wrd).length < 28) line1 += wrd + ' ';
+      else line2 += wrd + ' ';
+    });
+    ctx.fillText(line1.trim(), 230, 1460);
+    if (line2.trim()) ctx.fillText(line2.trim(), 230, 1530);
+    ctx.restore();
+  }
+
+  // Bottom Call-to-action & Waveform
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.font = '600 32px Figtree, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Dengarkan gratis di Fesify · Link di bio', w / 2, 1780);
+
+  const barCount = 18;
+  const barW = 12;
+  const barGap = 16;
+  const totalBarW = barCount * (barW + barGap);
+  const startX = (w - totalBarW) / 2;
+  ctx.fillStyle = '#1ed760';
+  for (let i = 0; i < barCount; i++) {
+    const hBar = 16 + Math.sin(i * 0.8) * 24 + 20;
+    ctx.roundRect(startX + i * (barW + barGap), 1830 - hBar, barW, hBar, 6);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Story Theme Switcher
+$$('[data-story-theme]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    $$('[data-story-theme]').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentStoryTheme = btn.dataset.storyTheme;
+    const song = focusedSong() || Player.current;
+    if (song) renderStoryCard(song);
+  });
+});
+
+$('#story-toggle-lyric')?.addEventListener('change', () => {
+  const song = focusedSong() || Player.current;
+  if (song) renderStoryCard(song);
+});
+
+$('#btn-download-story')?.addEventListener('click', () => {
+  const canvas = $('#story-canvas');
+  if (!canvas) return;
+  const song = focusedSong() || Player.current || { title: 'track' };
+  const safeName = (song.title || 'track').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  const link = document.createElement('a');
+  link.download = `fesify_story_${safeName}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  toast('Story Card berhasil didownload!');
+});
+
+$('#btn-copy-story-link')?.addEventListener('click', () => {
+  const song = focusedSong() || Player.current;
+  if (!song || !song.videoId) return;
+  const url = `${window.location.origin}/?v=${song.videoId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    toast('Link lagu berhasil disalin!');
+  });
+});
+
+/* 3. Spotify Playlist Importer Engine */
+function openSpotifyImportModal() {
+  openModalById('modal-spotify');
+  $('#spotify-import-input').value = '';
+  $('#spotify-import-status').classList.add('hidden');
+}
+
+$('#btn-run-spotify-import')?.addEventListener('click', async () => {
+  const input = $('#spotify-import-input');
+  const statusBox = $('#spotify-import-status');
+  const url = input?.value.trim();
+  if (!url) {
+    toast('Masukkan link playlist Spotify');
+    return;
+  }
+
+  statusBox.classList.remove('hidden');
+  statusBox.innerHTML = `<div>Sedang mengekstrak playlist & mencocokkan ke database YouTube Music...</div>`;
+
+  try {
+    const res = await fetch(`/api/import/spotify?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      statusBox.innerHTML = `<span style="color:#ff5555;">Gagal: ${data.error || 'Terjadi kesalahan'}</span>`;
+      return;
+    }
+
+    if (!data.tracks || data.tracks.length === 0) {
+      statusBox.innerHTML = `<span style="color:#ffaa00;">Tidak ada lagu yang berhasil dicocokkan.</span>`;
+      return;
+    }
+
+    const plName = data.name || 'Spotify Import';
+    const pl = Library.createPlaylist(plName);
+    data.tracks.forEach((t) => Library.addToPlaylist(pl.id, t));
+
+    statusBox.innerHTML = `<span style="color:#1ed760;">Berhasil mengimpor <b>${data.matchedCount} lagu</b> ke playlist "<b>${plName}</b>"!</span>`;
+    toast(`Playlist "${plName}" berhasil diimpor!`);
+
+    setTimeout(() => {
+      closeModalById('modal-spotify');
+      if (location.hash.startsWith('#/library')) {
+        route();
+      } else {
+        go(`#/localpl/${pl.id}`);
+      }
+    }, 1200);
+  } catch (err) {
+    statusBox.innerHTML = `<span style="color:#ff5555;">Koneksi error: ${err.message}</span>`;
+  }
+});
+
+/* 4. Equalizer & Studio Audio FX Engine */
+class AudioFxController {
+  constructor() {
+    this.frequencies = [60, 250, 1000, 4000, 8000, 16000];
+    this.bands = store.get('fesify_eq_bands', [0, 0, 0, 0, 0, 0]);
+    this.spatialOn = store.get('fesify_eq_spatial', false);
+    this.preset = store.get('fesify_eq_preset', 'flat');
+  }
+
+  init() {
+    this.bindUI();
+  }
+
+  bindUI() {
+    const sliders = [
+      $('#eq-b60'),
+      $('#eq-b250'),
+      $('#eq-b1k'),
+      $('#eq-b4k'),
+      $('#eq-b8k'),
+      $('#eq-b16k'),
+    ];
+
+    sliders.forEach((slider, idx) => {
+      if (!slider) return;
+      slider.value = this.bands[idx] || 0;
+      slider.addEventListener('input', (e) => {
+        this.bands[idx] = Number(e.target.value);
+        this.preset = 'custom';
+        this.updatePresetButtons();
+        this.save();
+      });
+    });
+
+    const spatialToggle = $('#eq-toggle-spatial');
+    if (spatialToggle) {
+      spatialToggle.checked = this.spatialOn;
+      spatialToggle.addEventListener('change', (e) => {
+        this.spatialOn = e.target.checked;
+        this.save();
+        toast(this.spatialOn ? '8D Spatial Simulator aktif' : '8D Spatial dimatikan');
+      });
+    }
+
+    $$('[data-eq-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = btn.dataset.eqPreset;
+        this.applyPreset(p);
+      });
+    });
+
+    this.updatePresetButtons();
+  }
+
+  applyPreset(name) {
+    this.preset = name;
+    if (name === 'flat') this.bands = [0, 0, 0, 0, 0, 0];
+    else if (name === 'bass') this.bands = [8, 5, 2, 0, 0, -1];
+    else if (name === 'vocal') this.bands = [-2, 1, 5, 4, 2, 1];
+    else if (name === 'treble') this.bands = [-2, -1, 0, 3, 6, 8];
+    else if (name === 'club') this.bands = [6, 4, -1, 2, 4, 5];
+
+    const sliders = [
+      $('#eq-b60'),
+      $('#eq-b250'),
+      $('#eq-b1k'),
+      $('#eq-b4k'),
+      $('#eq-b8k'),
+      $('#eq-b16k'),
+    ];
+    sliders.forEach((s, i) => {
+      if (s) s.value = this.bands[i];
+    });
+
+    this.updatePresetButtons();
+    this.save();
+    toast(`Preset Equalizer: ${name.toUpperCase()}`);
+  }
+
+  updatePresetButtons() {
+    $$('[data-eq-preset]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.eqPreset === this.preset);
+    });
+  }
+
+  save() {
+    store.set('fesify_eq_bands', this.bands);
+    store.set('fesify_eq_spatial', this.spatialOn);
+    store.set('fesify_eq_preset', this.preset);
+  }
+}
+const AudioFx = new AudioFxController();
+AudioFx.init();
+
+/* 5. Listen Together Live Room Sync Engine */
+class RoomSyncController {
+  constructor() {
+    this.roomId = null;
+    this.isHost = false;
+    this.eventSource = null;
+    this.lastSyncTime = 0;
+  }
+
+  init() {
+    $('#btn-create-room')?.addEventListener('click', () => this.createRoom());
+    $('#btn-join-room')?.addEventListener('click', () => {
+      const code = $('#join-room-input')?.value.trim();
+      if (code) this.joinRoom(code);
+    });
+    $('#btn-leave-room')?.addEventListener('click', () => this.leaveRoom());
+
+    // Check deep link ?room=...
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    if (roomParam) {
+      setTimeout(() => this.joinRoom(roomParam), 1000);
+    }
+  }
+
+  async createRoom() {
+    try {
+      const res = await fetch('/api/room/create', { method: 'POST' });
+      const data = await res.json();
+      if (data.roomId) {
+        this.roomId = data.roomId;
+        this.isHost = true;
+        this.showStatusBadge(this.roomId, true);
+        this.connectEvents(this.roomId);
+        toast(`Room dibuat! Kode: ${this.roomId}`);
+
+        if (Player.current) {
+          this.broadcastState();
+        }
+      }
+    } catch (err) {
+      toast('Gagal membuat room');
+    }
+  }
+
+  async joinRoom(code) {
+    const cleanCode = code.toUpperCase();
+    try {
+      const res = await fetch(`/api/room/${cleanCode}/state`);
+      if (!res.ok) {
+        toast('Room tidak ditemukan');
+        return;
+      }
+      const state = await res.json();
+      this.roomId = cleanCode;
+      this.isHost = false;
+      this.showStatusBadge(cleanCode, false);
+      this.connectEvents(cleanCode);
+      toast(`Terhubung ke room ${cleanCode}`);
+
+      if (state.currentTrack) {
+        playSong(state.currentTrack, [state.currentTrack], 0);
+        if (Player.yt && Player.ready && state.currentTime) {
+          Player.yt.seekTo(state.currentTime, true);
+        }
+      }
+    } catch (err) {
+      toast('Gagal bergabung ke room');
+    }
+  }
+
+  connectEvents(roomId) {
+    if (this.eventSource) this.eventSource.close();
+    this.eventSource = new EventSource(`/api/room/${roomId}/events`);
+    this.eventSource.onmessage = (e) => {
+      if (this.isHost) return;
+      try {
+        const data = JSON.parse(e.data);
+        if (!data || !data.currentTrack) return;
+
+        if (!Player.current || Player.current.videoId !== data.currentTrack.videoId) {
+          playSong(data.currentTrack, [data.currentTrack], 0);
+        }
+
+        if (Player.yt && Player.ready && typeof data.currentTime === 'number') {
+          const curTime = Player.yt.getCurrentTime() || 0;
+          if (Math.abs(curTime - data.currentTime) > 3) {
+            Player.yt.seekTo(data.currentTime, true);
+          }
+          if (data.isPlaying && Player.yt.getPlayerState() !== 1) {
+            Player.yt.playVideo();
+          } else if (!data.isPlaying && Player.yt.getPlayerState() === 1) {
+            Player.yt.pauseVideo();
+          }
+        }
+      } catch {}
+    };
+  }
+
+  broadcastState() {
+    if (!this.roomId || !this.isHost) return;
+    const now = Date.now();
+    if (now - this.lastSyncTime < 800) return;
+    this.lastSyncTime = now;
+
+    const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
+    const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
+
+    fetch(`/api/room/${this.roomId}/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentTrack: Player.current,
+        currentTime: curTime,
+        isPlaying,
+      }),
+    }).catch(() => {});
+  }
+
+  showStatusBadge(roomId, isHost) {
+    const badge = $('#room-active-status');
+    const text = $('#room-status-text');
+    if (badge && text) {
+      badge.classList.remove('hidden');
+      text.innerHTML = `${isHost ? '👑 Host' : '🎧 Listener'} di Room: <b>${roomId}</b>`;
+    }
+  }
+
+  leaveRoom() {
+    if (this.eventSource) this.eventSource.close();
+    this.roomId = null;
+    this.isHost = false;
+    $('#room-active-status')?.classList.add('hidden');
+    toast('Keluar dari room');
+  }
+}
+const RoomSync = new RoomSyncController();
+RoomSync.init();
+
+// Hook Player events to Room Sync
+const originalPlaySong = playSong;
+playSong = function(song, list, index) {
+  originalPlaySong(song, list, index);
+  setTimeout(() => RoomSync.broadcastState(), 500);
+};
+
+/* 6. Wire Button Triggers */
+$('#tb-room')?.addEventListener('click', () => openModalById('modal-room'));
+$('#tb-eq')?.addEventListener('click', () => openModalById('modal-eq'));
+$('#np-story')?.addEventListener('click', openStoryModal);
+$('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
+$('#np-room')?.addEventListener('click', () => openModalById('modal-room'));
