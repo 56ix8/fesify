@@ -104,9 +104,9 @@ a { color: inherit; }
   display: flex; flex-direction: column; align-items: center;
 }
 .splash-logo {
-  width: 128px; height: 128px; object-fit: contain;
+  width: 240px; height: 240px; max-width: 80vw; max-height: 80vh; object-fit: contain;
   animation: splashLogo 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
-  filter: drop-shadow(0 0 36px rgba(30, 215, 96, 0.4));
+  filter: drop-shadow(0 0 45px rgba(30, 215, 96, 0.45));
 }
 .splash-name {
   margin-top: 18px;
