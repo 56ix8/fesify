@@ -3732,11 +3732,21 @@ playSong = function(song, list, index) {
   setTimeout(() => RoomSync.broadcastState(), 500);
 };
 
+function openRoomModal() {
+  if (RoomSync.roomId) {
+    RoomSync.renderActiveView();
+  } else {
+    $('#room-active-view')?.classList.add('hidden');
+    $('#room-idle-view')?.classList.remove('hidden');
+  }
+  openModalById('modal-room');
+}
+
 /* 6. Wire Button Triggers */
-$('#tb-room')?.addEventListener('click', () => openModalById('modal-room'));
+$('#tb-room')?.addEventListener('click', openRoomModal);
 $('#tb-eq')?.addEventListener('click', () => openModalById('modal-eq'));
-$('#np-top-room')?.addEventListener('click', () => openModalById('modal-room'));
+$('#np-top-room')?.addEventListener('click', openRoomModal);
 $('#np-top-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-story')?.addEventListener('click', openStoryModal);
 $('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
-$('#np-room')?.addEventListener('click', () => openModalById('modal-room'));
+$('#np-room')?.addEventListener('click', openRoomModal);

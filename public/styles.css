@@ -32,6 +32,7 @@
   --eq: var(--accent-bright);
   color-scheme: dark;
 }
+.hidden { display: none !important; }
 html[data-theme="light"] {
   --bg: #ebebeb;
   --main-bg: #ffffff;
