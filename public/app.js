@@ -1320,12 +1320,13 @@ const NAV = [
   { id: 'home', label: 'Home', icon: 'i-home-o', iconActive: 'i-home', hash: '#/home' },
   { id: 'search', label: 'Search', icon: 'i-search', iconActive: 'i-search', hash: '#/search' },
   { id: 'charts', label: 'Charts', icon: 'i-chart', iconActive: 'i-chart', hash: '#/charts' },
-  { id: 'library', label: 'Your Library', icon: 'i-library', iconActive: 'i-library', hash: '#/library' },
+  { id: 'room', label: 'Live Room', icon: 'i-users', iconActive: 'i-users', hash: '#/room' },
+  { id: 'library', label: 'Library', icon: 'i-library', iconActive: 'i-library', hash: '#/library' },
 ];
 function renderNav() {
   const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
-  // desktop sidebar: only Home + Search (Spotify layout); library lives in its own box
-  $('#nav-desktop').innerHTML = NAV.filter((n) => ['home', 'search', 'charts'].includes(n.id))
+  // desktop sidebar: only Home + Search + Charts (Spotify layout); library lives in its own box
+  $('#nav-desktop').innerHTML = NAV.filter((n) => ['home', 'search', 'charts', 'room'].includes(n.id))
     .map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
   $('#nav-mobile').innerHTML = html;
   renderSidebarLibrary();
@@ -1386,6 +1387,7 @@ async function route() {
     if (parts[0] === '' || parts[0] === 'home') { setActiveNav('home'); await viewHome(view); }
     else if (parts[0] === 'search') { setActiveNav('search'); await viewSearch(view, decodeURIComponent(parts[1] || ''), params.get('filter')); }
     else if (parts[0] === 'charts') { setActiveNav('charts'); await viewCharts(view); }
+    else if (parts[0] === 'room') { setActiveNav('room'); openModalById('modal-room'); }
     else if (parts[0] === 'stats') { setActiveNav('library'); viewStats(view); }
     else if (parts[0] === 'moods') { setActiveNav('moods'); await viewMoods(view); }
     else if (parts[0] === 'library') { setActiveNav('library'); viewLibrary(view, parts[1] || 'playlists'); }
@@ -3618,6 +3620,8 @@ playSong = function(song, list, index) {
 /* 6. Wire Button Triggers */
 $('#tb-room')?.addEventListener('click', () => openModalById('modal-room'));
 $('#tb-eq')?.addEventListener('click', () => openModalById('modal-eq'));
+$('#np-top-room')?.addEventListener('click', () => openModalById('modal-room'));
+$('#np-top-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-story')?.addEventListener('click', openStoryModal);
 $('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-room')?.addEventListener('click', () => openModalById('modal-room'));

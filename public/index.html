@@ -163,7 +163,11 @@ try {
       <div class="np-topbar">
         <button id="np-close" class="icon-btn" title="Minimize"><svg class="ic"><use href="#i-chev-down"/></svg></button>
         <span class="np-caption">Now Playing</span>
-        <button id="np-sleep" class="icon-btn" title="Sleep timer"><svg class="ic"><use href="#i-clock"/></svg></button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button id="np-top-room" class="icon-btn" title="Listen Together (Live Sync)"><svg class="ic"><use href="#i-users"/></svg></button>
+          <button id="np-top-eq" class="icon-btn" title="Equalizer"><svg class="ic"><use href="#i-sliders"/></svg></button>
+          <button id="np-sleep" class="icon-btn" title="Sleep timer"><svg class="ic"><use href="#i-clock"/></svg></button>
+        </div>
       </div>
       <div class="np-tabs">
         <button data-nptab="player" class="np-tab active"><svg class="ic"><use href="#i-note"/></svg>Song</button>
