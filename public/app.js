@@ -284,6 +284,15 @@ window.onYouTubeIframeAPIReady = () => {
         if (e.data === YT.PlayerState.BUFFERING) applyPlaybackQuality();
         document.body.classList.toggle('paused', e.data !== YT.PlayerState.PLAYING);
         renderPlayButtons();
+
+        if (typeof RoomSync !== 'undefined') {
+          if (RoomSync.isHost) {
+            setTimeout(() => RoomSync.broadcastState(true), 200);
+          } else if (RoomSync.pendingSeek !== null && e.data === YT.PlayerState.PLAYING) {
+            Player.yt.seekTo(RoomSync.pendingSeek, true);
+            RoomSync.pendingSeek = null;
+          }
+        }
       },
       onPlaybackQualityChange: (e) => {
         if (!Player.hq) return;
@@ -3647,8 +3656,10 @@ class RoomSyncController {
 
   broadcastState(isHeartbeat = false) {
     if (!this.roomId || !this.isHost || !this.client || !this.client.connected) return;
+    if (!Player.current || !Player.current.videoId) return;
+
     const now = Date.now();
-    if (!isHeartbeat && (now - this.lastSyncTime < 400)) return;
+    if (!isHeartbeat && (now - this.lastSyncTime < 300)) return;
     this.lastSyncTime = now;
 
     const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
@@ -3656,7 +3667,7 @@ class RoomSyncController {
 
     const payload = {
       type: 'sync',
-      currentTrack: Player.current,
+      currentTrack: slimSong(Player.current),
       currentTime: curTime,
       isPlaying,
       timestamp: now,
@@ -3664,7 +3675,6 @@ class RoomSyncController {
 
     const topic = `fesify/sync/room/${this.roomId}`;
     try {
-      // Retain: true means new joiners immediately get this message upon connecting!
       this.client.publish(topic, JSON.stringify(payload), { qos: 0, retain: true });
     } catch {}
   }
@@ -3723,7 +3733,18 @@ RoomSync.init();
 const originalPlaySong = playSong;
 playSong = function(song, list, index) {
   originalPlaySong(song, list, index);
-  setTimeout(() => RoomSync.broadcastState(), 500);
+  if (RoomSync && RoomSync.isHost) {
+    setTimeout(() => RoomSync.broadcastState(true), 300);
+    setTimeout(() => RoomSync.broadcastState(true), 1200);
+  }
+};
+
+const originalTogglePlay = togglePlay;
+togglePlay = function() {
+  originalTogglePlay();
+  if (RoomSync && RoomSync.isHost) {
+    setTimeout(() => RoomSync.broadcastState(true), 200);
+  }
 };
 
 function openRoomModal() {
