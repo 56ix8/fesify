@@ -1862,7 +1862,7 @@ async function importFromLink(url) {
 /* ---- backup / restore whole local library as a JSON file ---- */
 function backupLibrary() {
   const data = {
-    app: 'rich-music',
+    app: 'fesify',
     version: 2,
     exportedAt: new Date().toISOString(),
     favorites: Library.favorites,
@@ -1881,7 +1881,7 @@ function backupLibrary() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `rich-music-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `fesify-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
@@ -1900,7 +1900,7 @@ function restoreLibrary() {
     reader.onload = () => {
       try {
         const d = JSON.parse(reader.result);
-        if (!d || (d.app !== 'rich-music' && d.app !== 'smw')) throw new Error('Not a Fesify backup');
+        if (!d || (d.app !== 'fesify' && d.app !== 'rich-music' && d.app !== 'smw')) throw new Error('Not a Fesify backup');
         const hasLib = Array.isArray(d.favorites) || Array.isArray(d.playlists) || Array.isArray(d.saved) || Array.isArray(d.history);
         if (!hasLib) throw new Error('Backup file is empty or invalid');
         if (Array.isArray(d.favorites)) store.set('fav', d.favorites);

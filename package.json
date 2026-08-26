@@ -1,5 +1,5 @@
 {
-  "name": "rich-music",
+  "name": "fesify",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "express": "^5.2.1"
   }
 }

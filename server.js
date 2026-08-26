@@ -680,7 +680,7 @@ async function neteaseLyrics(title, artist) {
 async function lrclibGet(title, artist, duration) {
   try {
     const u = `https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}${duration ? `&duration=${Math.round(duration)}` : ''}`;
-    const r = await fetchTimeout(u, { headers: { 'User-Agent': 'RichMusic/1.0' } }, 4000);
+    const r = await fetchTimeout(u, { headers: { 'User-Agent': 'Fesify/1.0' } }, 4000);
     if (!r.ok) return null;
     const j = await r.json();
     if (j.instrumental) return null;
@@ -690,7 +690,7 @@ async function lrclibGet(title, artist, duration) {
 async function lrclibSearch(params) {
   try {
     const qs = new URLSearchParams(params).toString();
-    const r = await fetchTimeout(`https://lrclib.net/api/search?${qs}`, { headers: { 'User-Agent': 'RichMusic/1.0' } }, 4000);
+    const r = await fetchTimeout(`https://lrclib.net/api/search?${qs}`, { headers: { 'User-Agent': 'Fesify/1.0' } }, 4000);
     if (!r.ok) return [];
     return await r.json();
   } catch { return []; }

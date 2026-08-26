@@ -1,173 +1,67 @@
-# Rich Music
+# Fesify
 
-**Pemutar musik web gratis** bergaya Spotify, katalog [YouTube Music](https://music.youtube.com). Tanpa akun.
-
-- **Website:** [richmusic.vercel.app](https://richmusic.vercel.app)
-- **Repo:** [github.com/ramax100/YT-Music-Mod](https://github.com/ramax100/YT-Music-Mod)
-- **Telegram:** [t.me/ChRichStore](https://t.me/ChRichStore)
-
-Project ini **gratis** dan **bebas dipakai**. Fork, ubah, deploy sendiri, atau bagikan — silakan.
+**Pemutar musik web gratis** bergaya modern Spotify & Apple Music, didukung jutaan katalog musik [YouTube Music](https://music.youtube.com). Tanpa login, tanpa iklan.
 
 ---
 
-## Tentang
+## Tentang Fesify
 
-Rich Music adalah pemutar musik di browser. Cari lagu, buka album dan artis, buat playlist, lihat lirik, atur antrian — semuanya tanpa daftar akun.
+Fesify adalah pemutar musik web instan dan modern. Cari lagu favorit, dengarkan album dan artis populer, buat playlist pribadi, baca lirik tersinkronisasi per detik, buat **Instagram Story Card**, impor playlist dari **Spotify**, dan nikmati musik bersama teman melalui fitur **Listen Together (Live Sync Rooms)** — semuanya tanpa perlu registrasi akun.
 
-Library (favorit, playlist, riwayat, statistik) tersimpan di perangkatmu. Audio diputar lewat pemutar resmi YouTube.
-
-Tidak berafiliasi dengan YouTube, Google, atau Spotify.
+Seluruh data library (favorit, playlist, riwayat putar, dan statistik) tersimpan aman di perangkat lokal pengguna.
 
 ---
 
-## Channel Telegram
+## Fitur Unggulan
 
-Update, info fitur, dan komunitas:
+### 1. Instagram Story Card Generator (9:16 Visual Exporter)
+Buat poster musik vertikal resolusi tinggi (1080×1920) dengan album art, lirik aktif, visualizer gelombang, dan logo Fesify siap bagikan ke Instagram Story.
 
-### [t.me/ChRichStore](https://t.me/ChRichStore)
+### 2. Spotify Playlist Importer
+Salin link playlist/album Spotify publik apa pun untuk langsung dipindahkan dan dicocokkan ke database Fesify dalam hitungan detik.
 
-Silakan join.
+### 3. Built-in Equalizer & Audio FX
+Atur 6-band frekuensi audio dengan preset studio (*Bass Boost*, *Vocal Booster*, *Treble Crisp*, *Electronic Club*) dan simulator tata suara panggung *8D Spatial Audio*.
 
----
+### 4. Listen Together (Live Sync Rooms)
+Buat room siaran musik dan bagikan kode room ke teman untuk mendengarkan lagu dan detik pemutaran yang sama secara real-time.
 
-## Cara memakai website
-
-1. Buka **[richmusic.vercel.app](https://richmusic.vercel.app)**
-2. Cari lagu, atau pilih dari Home / Charts / Browse all
-3. Lagu pertama langsung play. Kalau klik lagu lain, Now Playing menampilkan lagu baru — tekan **Play** untuk mengganti putaran
-4. Ikon hati = favorit. **Playlist** = simpan ke folder. Di halaman album/artis, **Save** masuk tab Saved
-5. Pindah HP? Library → **Backup**, di perangkat baru **Restore**
-
-### Desktop / PC
-
-Di laptop atau komputer, Rich Music langsung siap. Buka situsnya, pilih lagu, dan putar — tidak perlu pengaturan tambahan.
-
-### Putar di latar belakang (Android)
-
-Musik tetap jalan saat layar terkunci atau pindah aplikasi, **tanpa mode desktop**.
-
-Buka [richmusic.vercel.app](https://richmusic.vercel.app) di **[Brave Browser](https://play.google.com/store/apps/details?id=com.brave.browser)** — putar lagu, lalu keluar dari tab atau kunci HP. Audio tetap berlanjut.
-
-Di Chrome, aktifkan **⋮ → Situs desktop** jika ingin hasil serupa.
+### 5. PWA & Offline Caching
+Didukung Service Worker (`sw.js`) untuk akses instan dan dapat di-install langsung di HP (Android/iOS) maupun laptop/PC.
 
 ---
 
-## Fitur
+## Menjalankan Secara Lokal
 
-### Home
-- Sapaan sesuai waktu dan tanggal
-- Recently played
-- Mix for you — rekomendasi dari favorit & riwayat
-- Liked songs, playlist lokal, item Saved
-- Rak YouTube Music
-- Carousel geser; di desktop ada panah
-
-### Search
-- Saran otomatis saat mengetik
-- Filter: All, Songs, Videos, Albums, Artists, Playlists
-- Top result sebagai kartu besar
-- Hasil dikelompokkan (lagu, album, artis, playlist)
-- Riwayat pencarian
-- Browse all — mood & genre
-
-### Charts
-- Tangga lagu, playlist genre, artis teratas
-
-### Library
-Tanpa login, tersimpan di perangkat ini.
-
-| Tab | Isi |
-| --- | --- |
-| Playlists | Playlist buatanmu + kartu Liked Songs |
-| Favorites | Lagu yang di-heart, Play all / Shuffle |
-| Saved | Album, playlist, artis yang di-Save |
-| History | Yang baru diputar |
-| Stats | Total putar, menit, top artis, lagu terbanyak |
-
-- New playlist
-- Import dari link YouTube Music (playlist, album, artis, lagu)
-- Backup / Restore file JSON
-- Rename, hapus, urutkan lagu (panah atau drag di desktop)
-
-### Player
-- Streaming YouTube IFrame (audio YouTube Music)
-- Quality di menu ⋮ — bisa dinaikkan ke YouTube max
-- Preview lagu lain tanpa memutus yang sedang play
-- Shuffle & Repeat (mati / semua / satu)
-- Kecepatan 0.5×–2×
-- Antrian: Your queue dulu, lalu radio. Tersimpan saat refresh
-- Play next / Add to queue
-- Related: lagu, album, playlist, artis
-- Lirik sinkron — tap baris untuk loncat
-- Share (menu HP atau salin tautan)
-- Download MP3
-- SponsorBlock — skip intro/sponsor (bisa dimatikan)
-- Sleep timer
-- Widget mengambang + Picture-in-Picture
-- Mode gelap / terang
-- Nama artis bisa diklik ke halaman artis
-
-### Pintasan keyboard
-
-| Tombol | Aksi |
-| --- | --- |
-| `Space` | Play / Pause |
-| `Shift` + `→` | Berikutnya |
-| `Shift` + `←` | Sebelumnya |
-| `Esc` | Tutup Now Playing |
-| `L` | Ganti tema |
-| `P` | Widget |
-
----
-
-## Menjalankan di komputer sendiri
-
-Perlu [Node.js](https://nodejs.org) 18+ (disarankan 20).
+Memerlukan [Node.js](https://nodejs.org) versi 18+.
 
 ```bash
-git clone https://github.com/ramax100/YT-Music-Mod.git
-cd YT-Music-Mod
+git clone https://github.com/56ix8/fesify.git
+cd fesify
 npm install
 npm start
 ```
 
-Buka **http://localhost:3000**
+Buka **http://localhost:3000** di browser.
 
 ---
 
 ## Deploy ke Vercel
 
-```bash
-npm i -g vercel
-cd YT-Music-Mod
-vercel login
-vercel --prod
-```
-
-Atau di dashboard Vercel: **Import Git Repository** → pilih `ramax100/YT-Music-Mod` → Deploy.
+1. Buka [vercel.com/new](https://vercel.com/new).
+2. Import repository **`56ix8/fesify`**.
+3. Klik **Deploy** (konfigurasi sudah otomatis melalui `vercel.json`).
 
 ---
 
-## Isi repo
+## Struktur Folder
 
 ```
-YT-Music-Mod/
-├── public/           # website (HTML, CSS, JS, logo)
-├── server.js         # API: YouTube Music, lirik, download
-├── api/index.js      # entry Vercel
-├── vercel.json
+fesify/
+├── public/           # Frontend Web (HTML, CSS, Vanilla JS, Logos, SW)
+├── server.js         # Backend Express & YouTube Music Proxy / Rooms / Spotify Matcher
+├── api/index.js      # Serverless entry point untuk Vercel
+├── vercel.json       # Konfigurasi routing Vercel
 ├── package.json
 └── README.md
 ```
-
----
-
-## Lisensi
-
-**Gratis. Bebas dipakai.**
-
-Jalankan, bagikan, ubah, dan deploy ulang sesukamu. Tidak ada biaya.
-
----
-
-**[Buka Rich Music](https://richmusic.vercel.app)** · **[Join Telegram](https://t.me/ChRichStore)** · **[GitHub](https://github.com/ramax100/YT-Music-Mod)**
