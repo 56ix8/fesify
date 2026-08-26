@@ -266,6 +266,17 @@ window.onYouTubeIframeAPIReady = () => {
           const iframe = Player.yt.getIframe && Player.yt.getIframe();
           if (iframe) iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
         } catch {}
+
+        // Intercept seekTo so Host seek immediately syncs to all guests
+        if (Player.yt && Player.yt.seekTo) {
+          const origSeek = Player.yt.seekTo.bind(Player.yt);
+          Player.yt.seekTo = function(sec, allowAhead) {
+            origSeek(sec, allowAhead);
+            if (typeof RoomSync !== 'undefined' && RoomSync.isHost) {
+              setTimeout(() => RoomSync.broadcastState(true), 50);
+            }
+          };
+        }
       },
       onStateChange: (e) => {
         if (e.data === YT.PlayerState.ENDED) {
@@ -651,6 +662,9 @@ function cycleSpeed() {
   $('#np-speed span').textContent = Player.speed + '×';
   persistQueue();
   toast(`Speed: ${Player.speed}×`);
+  if (typeof RoomSync !== 'undefined' && RoomSync.isHost) {
+    setTimeout(() => RoomSync.broadcastState(true), 50);
+  }
 }
 function toggleSB() {
   Player.sbEnabled = !Player.sbEnabled;
@@ -3633,7 +3647,17 @@ class RoomSyncController {
       playSong(data.currentTrack, [data.currentTrack], 0);
     }
 
-    // 2. Sync playback position & state
+    // 2. Sync playback speed
+    if (typeof data.speed === 'number' && Player.speed !== data.speed) {
+      Player.speed = data.speed;
+      if (Player.yt && Player.ready) {
+        try { Player.yt.setPlaybackRate(data.speed); } catch {}
+      }
+      const sp = $('#np-speed span');
+      if (sp) sp.textContent = data.speed + '×';
+    }
+
+    // 3. Sync playback position & state
     if (Player.yt && Player.ready) {
       const curTime = Player.yt.getCurrentTime() || 0;
       const isPlaying = Player.yt.getPlayerState() === 1;
@@ -3642,7 +3666,7 @@ class RoomSyncController {
         Player.yt.seekTo(this.pendingSeek, true);
         if (data.isPlaying) Player.yt.playVideo();
         this.pendingSeek = null;
-      } else if (Math.abs(curTime - targetSeek) > 2) {
+      } else if (Math.abs(curTime - targetSeek) > 1.2) {
         Player.yt.seekTo(targetSeek, true);
       }
 
@@ -3659,7 +3683,7 @@ class RoomSyncController {
     if (!Player.current || !Player.current.videoId) return;
 
     const now = Date.now();
-    if (!isHeartbeat && (now - this.lastSyncTime < 300)) return;
+    if (!isHeartbeat && (now - this.lastSyncTime < 200)) return;
     this.lastSyncTime = now;
 
     const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
@@ -3670,6 +3694,7 @@ class RoomSyncController {
       currentTrack: slimSong(Player.current),
       currentTime: curTime,
       isPlaying,
+      speed: Player.speed || 1,
       timestamp: now,
     };
 
