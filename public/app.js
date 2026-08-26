@@ -1473,7 +1473,11 @@ async function viewHome(view) {
     html += `<div class="shelf"><div class="shelf-title">Saved</div>
       ${carouselHTML(saved.map(cardHTML).join(''))}</div>`;
   }
-  html += d.sections.map(shelfHTML).join('');
+  const cleanSections = (d.sections || []).filter((sec) => {
+    const t = String(sec.title || '').toLowerCase();
+    return !t.includes('remembering') && !t.includes('in memoriam') && !t.includes('tribute to');
+  });
+  html += cleanSections.map(shelfHTML).join('');
   view.innerHTML = html;
   bindItems(view);
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
@@ -3896,3 +3900,46 @@ $('#np-top-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-story')?.addEventListener('click', openStoryModal);
 $('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-room')?.addEventListener('click', openRoomModal);
+
+/* 7. Anti-Inspect & Source Obfuscation Protection Layer */
+(() => {
+  // Disable context menu (right-click) except on inputs
+  document.addEventListener('contextmenu', (e) => {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+    }
+  });
+
+  // Block Developer Tools Shortcuts
+  document.addEventListener('keydown', (e) => {
+    // F12
+    if (e.keyCode === 123) {
+      e.preventDefault();
+      return false;
+    }
+    // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (Windows/Linux)
+    if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+      e.preventDefault();
+      return false;
+    }
+    // Cmd+Option+I, Cmd+Option+J, Cmd+Option+C (macOS)
+    if (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+      e.preventDefault();
+      return false;
+    }
+    // Ctrl+U (View Source), Ctrl+S (Save Page)
+    if ((e.ctrlKey || e.metaKey) && (e.keyCode === 85 || e.keyCode === 83)) {
+      e.preventDefault();
+      return false;
+    }
+  });
+
+  // Suppress and clean console logs
+  try {
+    const noop = () => {};
+    console.log = noop;
+    console.info = noop;
+    console.warn = noop;
+    console.debug = noop;
+  } catch {}
+})();

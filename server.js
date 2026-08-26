@@ -232,6 +232,11 @@ app.get('/api/home', async (req, res) => {
         cont = slc.continuations && slc.continuations[0] && slc.continuations[0].nextContinuationData;
         n++;
       }
+      // Filter out static memorial/tribute promotional shelves
+      sections = sections.filter((s) => {
+        const title = String(s.title || '').toLowerCase();
+        return !title.includes('remembering') && !title.includes('in memoriam') && !title.includes('tribute to');
+      });
       return { sections };
     });
     res.json(data);
