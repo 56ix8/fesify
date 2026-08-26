@@ -3471,23 +3471,21 @@ class AudioFxController {
 const AudioFx = new AudioFxController();
 AudioFx.init();
 
-/* 5. Listen Together Live Room Sync Engine (WebRTC P2P + Zero-Serverless-Lag) */
+/* 5. Listen Together Live Room Sync Engine (Global Realtime MQTT PubSub) */
 class RoomSyncController {
   constructor() {
     this.roomId = null;
     this.isHost = false;
-    this.peer = null;
-    this.connections = [];
-    this.hostConn = null;
+    this.client = null;
     this.lastSyncTime = 0;
     this.pendingSeek = null;
 
-    // Heartbeat: Host broadcasts playback status every 1.5s to all guests
+    // Heartbeat: Host publishes state every 2 seconds
     setInterval(() => {
-      if (this.isHost && this.roomId && this.connections.length > 0) {
+      if (this.isHost && this.roomId && this.client && this.client.connected) {
         this.broadcastState(true);
       }
-    }, 1500);
+    }, 2000);
   }
 
   init() {
@@ -3529,143 +3527,114 @@ class RoomSyncController {
     return code;
   }
 
-  createRoom() {
-    if (typeof Peer === 'undefined') {
-      toast('Memuat koneksi P2P...');
+  connectBroker(onConnect) {
+    if (typeof mqtt === 'undefined') {
+      toast('Memuat modul real-time...');
       return;
     }
+    if (this.client) {
+      try { this.client.end(true); } catch {}
+      this.client = null;
+    }
+
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const clientId = 'fesify_' + Math.random().toString(16).substring(2, 10);
+
+    this.client = mqtt.connect(brokerUrl, {
+      clientId,
+      clean: true,
+      connectTimeout: 5000,
+      reconnectPeriod: 2500,
+    });
+
+    this.client.on('connect', () => {
+      if (onConnect) onConnect();
+    });
+
+    this.client.on('error', (err) => {
+      console.warn('MQTT error:', err);
+    });
+  }
+
+  createRoom() {
     const code = this.generateRoomCode();
     this.leaveRoom(true);
 
-    try {
-      this.peer = new Peer('fesify-room-' + code);
-      this.peer.on('open', () => {
-        this.roomId = code;
-        this.isHost = true;
-        this.connections = [];
-        this.renderActiveView();
-        toast(`Room ${code} aktif! Siap disiarkan.`);
-        this.broadcastState(true);
-      });
+    this.connectBroker(() => {
+      this.roomId = code;
+      this.isHost = true;
+      this.renderActiveView();
+      toast(`Room ${code} aktif! Siap disiarkan.`);
 
-      this.peer.on('connection', (conn) => {
-        this.connections.push(conn);
-        this.updateListenerCount();
-        toast('Teman baru bergabung ke room kamu!');
+      const topic = `fesify/sync/room/${code}`;
+      this.client.subscribe(topic, { qos: 0 });
 
-        conn.on('open', () => {
-          this.sendStateToConn(conn);
-        });
-
-        conn.on('data', (msg) => {
-          if (msg && msg.type === 'get_state') {
-            this.sendStateToConn(conn);
-          }
-        });
-
-        conn.on('close', () => {
-          this.connections = this.connections.filter((c) => c !== conn);
-          this.updateListenerCount();
-        });
-      });
-
-      this.peer.on('error', (err) => {
-        if (err && err.type === 'unavailable-id') {
-          setTimeout(() => this.createRoom(), 200);
-        } else {
-          toast('Koneksi room error');
-        }
-      });
-    } catch (e) {
-      toast('Gagal membuat room P2P');
-    }
-  }
-
-  sendStateToConn(conn) {
-    const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
-    const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
-    try {
-      conn.send({
-        type: 'sync',
-        currentTrack: Player.current,
-        currentTime: curTime,
-        isPlaying,
-      });
-    } catch {}
+      // Immediate publish current state
+      this.broadcastState(true);
+    });
   }
 
   joinRoom(code) {
-    if (typeof Peer === 'undefined') {
-      toast('Sedang memuat sistem P2P...');
-      return;
-    }
     const cleanCode = code.toUpperCase().trim();
     if (!cleanCode) return;
     this.leaveRoom(true);
 
-    try {
-      this.peer = new Peer();
-      this.peer.on('open', () => {
-        this.hostConn = this.peer.connect('fesify-room-' + cleanCode);
-        
-        let connected = false;
-        this.hostConn.on('open', () => {
-          connected = true;
-          this.roomId = cleanCode;
-          this.isHost = false;
-          this.renderActiveView();
-          toast(`Terhubung ke room ${cleanCode}`);
-          // Request instant state
-          try { this.hostConn.send({ type: 'get_state' }); } catch {}
-        });
+    this.connectBroker(() => {
+      this.roomId = cleanCode;
+      this.isHost = false;
+      this.renderActiveView();
+      toast(`Terhubung ke room ${cleanCode}`);
 
-        this.hostConn.on('data', (data) => {
-          if (!data || data.type !== 'sync') return;
+      const topic = `fesify/sync/room/${cleanCode}`;
+      this.client.subscribe(topic, { qos: 0 });
+
+      let receivedFirst = false;
+
+      this.client.on('message', (t, message) => {
+        if (t !== topic) return;
+        try {
+          const data = JSON.parse(message.toString());
+          if (!data || !data.currentTrack) return;
+          receivedFirst = true;
           this.applySyncData(data);
-        });
-
-        this.hostConn.on('close', () => {
-          toast('Host telah menutup room');
-          this.leaveRoom();
-        });
-
-        setTimeout(() => {
-          if (!connected && !this.isHost && this.roomId !== cleanCode) {
-            toast('Room tidak ditemukan atau Host sedang offline');
-          }
-        }, 6000);
+        } catch {}
       });
 
-      this.peer.on('error', () => {
-        toast('Room tidak ditemukan atau Host offline');
-      });
-    } catch (e) {
-      toast('Gagal bergabung ke room');
-    }
+      // If no state received after 5s, notify
+      setTimeout(() => {
+        if (!receivedFirst && this.roomId === cleanCode && !this.isHost) {
+          toast('Menunggu host memutar lagu di room...');
+        }
+      }, 5000);
+    });
   }
 
   applySyncData(data) {
     if (!data.currentTrack || !data.currentTrack.videoId) return;
 
-    // 1. Play track if different or nothing is playing
+    // Latency compensation
+    const now = Date.now();
+    const elapsed = data.timestamp ? Math.max(0, (now - data.timestamp) / 1000) : 0;
+    const targetSeek = (typeof data.currentTime === 'number' ? data.currentTime : 0) + (data.isPlaying ? elapsed : 0);
+
+    // 1. Play track if different or not playing
     const needNewTrack = !Player.current || Player.current.videoId !== data.currentTrack.videoId;
     if (needNewTrack) {
-      this.pendingSeek = typeof data.currentTime === 'number' ? data.currentTime : 0;
+      this.pendingSeek = targetSeek;
       playSong(data.currentTrack, [data.currentTrack], 0);
     }
 
-    // 2. Continuous time & play/pause synchronization
+    // 2. Sync playback position & state
     if (Player.yt && Player.ready) {
       const curTime = Player.yt.getCurrentTime() || 0;
       const isPlaying = Player.yt.getPlayerState() === 1;
 
-      // Handle initial pending seek
       if (this.pendingSeek !== null) {
         Player.yt.seekTo(this.pendingSeek, true);
         if (data.isPlaying) Player.yt.playVideo();
         this.pendingSeek = null;
-      } else if (typeof data.currentTime === 'number' && Math.abs(curTime - data.currentTime) > 2) {
-        Player.yt.seekTo(data.currentTime, true);
+      } else if (Math.abs(curTime - targetSeek) > 2) {
+        Player.yt.seekTo(targetSeek, true);
       }
 
       if (data.isPlaying && !isPlaying && Player.yt.getPlayerState() !== 3) {
@@ -3677,7 +3646,7 @@ class RoomSyncController {
   }
 
   broadcastState(isHeartbeat = false) {
-    if (!this.roomId || !this.isHost || !this.connections.length) return;
+    if (!this.roomId || !this.isHost || !this.client || !this.client.connected) return;
     const now = Date.now();
     if (!isHeartbeat && (now - this.lastSyncTime < 400)) return;
     this.lastSyncTime = now;
@@ -3690,13 +3659,14 @@ class RoomSyncController {
       currentTrack: Player.current,
       currentTime: curTime,
       isPlaying,
+      timestamp: now,
     };
 
-    this.connections.forEach((conn) => {
-      try {
-        if (conn.open) conn.send(payload);
-      } catch {}
-    });
+    const topic = `fesify/sync/room/${this.roomId}`;
+    try {
+      // Retain: true means new joiners immediately get this message upon connecting!
+      this.client.publish(topic, JSON.stringify(payload), { qos: 0, retain: true });
+    } catch {}
   }
 
   renderActiveView() {
@@ -3719,26 +3689,18 @@ class RoomSyncController {
   updateListenerCount() {
     const countEl = $('#room-listeners-count');
     if (!countEl) return;
-    if (this.isHost) {
-      const count = this.connections.length + 1;
-      countEl.textContent = `${count} Pengguna Terhubung`;
-    } else {
-      countEl.textContent = 'Tersinkron dengan Host';
-    }
+    countEl.textContent = this.isHost ? 'Siaran Live Aktif' : 'Tersinkron dengan Host';
   }
 
   leaveRoom(silent = false) {
-    if (this.hostConn) {
-      try { this.hostConn.close(); } catch {}
-      this.hostConn = null;
-    }
-    if (this.connections && this.connections.length) {
-      this.connections.forEach((c) => { try { c.close(); } catch {} });
-      this.connections = [];
-    }
-    if (this.peer) {
-      try { this.peer.destroy(); } catch {}
-      this.peer = null;
+    if (this.client) {
+      if (this.isHost && this.roomId) {
+        try {
+          this.client.publish(`fesify/sync/room/${this.roomId}`, '', { retain: true });
+        } catch {}
+      }
+      try { this.client.end(true); } catch {}
+      this.client = null;
     }
     this.roomId = null;
     this.isHost = false;
