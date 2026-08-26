@@ -1,4 +1,4 @@
-﻿/* Fesify - Cloudflare Pages Edge Function (Universal /api Handler) */
+/* Fesify - Cloudflare Pages Edge Function (Universal /api Handler) */
 
 const YTM = 'https://music.youtube.com/youtubei/v1';
 const CONTEXT = {
@@ -32,12 +32,12 @@ function json(data, status = 200) {
 }
 
 async function yt(endpoint, body = {}, query = '') {
-  const res = await fetch(${YTM}/?prettyPrint=false, {
+  const res = await fetch(YTM + '/' + endpoint + '?prettyPrint=false' + query, {
     method: 'POST',
     headers: HEADERS,
     body: JSON.stringify({ context: CONTEXT, ...body }),
   });
-  if (!res.ok) throw new Error(YTM  -> );
+  if (!res.ok) throw new Error('YTM ' + endpoint + ' -> ' + res.status);
   return res.json();
 }
 
@@ -302,16 +302,14 @@ export async function onRequest(context) {
       const d = await yt('music/get_search_suggestions', { input: url.searchParams.get('q') || '' });
       const sugg = findAll(d, 'searchSuggestionRenderer').map((s) => text(s.suggestion));
       return json({ suggestions: sugg });
-    }
-
-    // 6. /api/next
+    }    // 6. /api/next
     if (path === 'next') {
       const vid = url.searchParams.get('videoId');
       const plId = url.searchParams.get('playlistId');
       const body = { isAudioOnly: true, tunerSettingValue: 'AUTOMIX_SETTING_NORMAL' };
       if (vid) {
         body.videoId = vid;
-        body.playlistId = plId || RDAMVM;
+        body.playlistId = plId || ('RDAMVM' + vid);
       } else if (plId) {
         body.playlistId = plId;
       }
@@ -369,7 +367,7 @@ export async function onRequest(context) {
     if (path === 'sponsorblock') {
       const vid = String(url.searchParams.get('videoId') || '');
       const cats = encodeURIComponent(JSON.stringify(['sponsor', 'selfpromo', 'interaction', 'intro', 'outro', 'music_offtopic']));
-      const r = await fetch(https://sponsor.ajay.app/api/skipSegments?videoID=&categories=);
+      const r = await fetch('https://sponsor.ajay.app/api/skipSegments?videoID=' + encodeURIComponent(vid) + '&categories=' + cats);
       if (!r.ok) return json({ segments: [] });
       const arr = await r.json();
       return json({ segments: (arr || []).filter((s) => s.actionType === 'skip').map((s) => ({ category: s.category, start: s.segment[0], end: s.segment[1] })) });
@@ -381,12 +379,11 @@ export async function onRequest(context) {
   }
 }
 
-
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS });
-    if (url.pathname.startsWith('/api/')) return onRequest({ request: req });
+    if (url.pathname.startsWith('/api/')) return handleApiRequest(req, url);
     if (env && env.ASSETS) return env.ASSETS.fetch(req);
     return fetch(req);
   }
