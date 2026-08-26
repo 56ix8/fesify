@@ -342,35 +342,72 @@ try {
 
   <!-- 4. Listen Together Room Modal -->
   <div id="modal-room" class="hidden modal-overlay">
-    <div class="modal-card">
+    <div class="modal-card room-modal-card">
       <div class="modal-header-row">
         <div style="display:flex;align-items:center;gap:8px;">
-          <svg class="ic" style="color:var(--accent);"><use href="#i-users"/></svg>
+          <svg class="ic" style="color:var(--accent-bright);"><use href="#i-users"/></svg>
           <h3>Listen Together (Live Sync)</h3>
         </div>
         <button class="icon-btn btn-modal-close" data-close-modal="modal-room"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
-      <div id="room-active-status" class="room-status-badge hidden">
-        <span class="live-dot"></span>
-        <span id="room-status-text">Connected to Room: <b>—</b></span>
-        <button id="btn-leave-room" class="pill-btn sm">Leave</button>
-      </div>
-      <div class="room-action-tabs">
-        <div style="margin-bottom:16px;">
-          <h4 style="font-size:13px;margin-bottom:6px;">Host Listening Party</h4>
-          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Buat room siaran musik langsung dan bagikan ke teman/Story IG kamu.</p>
-          <button id="btn-create-room" class="pill-btn active">Buat Room Baru</button>
+
+      <!-- Active Room State (shown when connected) -->
+      <div id="room-active-view" class="hidden">
+        <div class="room-status-badge">
+          <div style="display:flex;align-items:center;">
+            <span class="live-dot"></span>
+            <span id="room-role-badge">👑 Kamu adalah Host</span>
+          </div>
+          <span id="room-listeners-count" style="font-size:12px;color:var(--muted);">1 Terhubung</span>
         </div>
-        <div style="border-top:1px solid var(--border);padding-top:14px;">
-          <h4 style="font-size:13px;margin-bottom:6px;">Gabung Room Teman</h4>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="join-room-input" class="modal-text-input" placeholder="Kode Room (misal: HT8QHW)" style="text-transform:uppercase;" />
-            <button id="btn-join-room" class="pill-btn">Gabung</button>
+
+        <div class="room-code-display-box">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Kode Room Siaran</div>
+          <div id="room-code-text" class="room-code-big">—</div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;">
+            <button id="btn-copy-room-link" class="pill-btn primary" style="font-size:13px;padding:9px 18px;">
+              <svg class="ic"><use href="#i-share"/></svg> Salin Link Undangan
+            </button>
+            <button id="btn-copy-room-code" class="pill-btn" style="font-size:13px;padding:9px 14px;">
+              Salin Kode
+            </button>
           </div>
         </div>
+
+        <p style="font-size:12px;color:var(--muted);text-align:center;margin:12px 0 16px;line-height:1.4;">
+          Bagikan link undangan ke teman. Begitu mereka membuka link tersebut, musik di perangkat mereka akan berputar secara serentak (*real-time sync*).
+        </p>
+
+        <div class="modal-actions" style="margin-top:0;">
+          <button id="btn-leave-room-active" class="pill-btn" style="color:#ff5555;border-color:rgba(255,85,85,0.4);">
+            Keluar dari Room
+          </button>
+          <button class="pill-btn btn-modal-close" data-close-modal="modal-room">Tutup</button>
+        </div>
       </div>
-      <div class="modal-actions" style="margin-top:16px;">
-        <button class="pill-btn btn-modal-close" data-close-modal="modal-room">Tutup</button>
+
+      <!-- Idle State (shown when not connected) -->
+      <div id="room-idle-view">
+        <div style="margin-bottom:16px;">
+          <h4 style="font-size:13.5px;margin-bottom:4px;">Host Listening Party (Buat Room)</h4>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Putar musik dan siarkan ke teman atau followers Instagram kamu.</p>
+          <button id="btn-create-room" class="pill-btn primary" style="width:100%;justify-content:center;">
+            <svg class="ic"><use href="#i-users"/></svg> Buat Room Baru
+          </button>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:16px;">
+          <h4 style="font-size:13.5px;margin-bottom:4px;">Gabung Room Teman</h4>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Punya kode dari teman? Masukkan di bawah untuk mulai mendengarkan bersama:</p>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="join-room-input" class="modal-text-input" placeholder="Misal: P84LWM" style="text-transform:uppercase;font-weight:700;letter-spacing:0.05em;" />
+            <button id="btn-join-room" class="pill-btn" style="white-space:nowrap;font-weight:700;">Gabung</button>
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="pill-btn btn-modal-close" data-close-modal="modal-room">Tutup</button>
+        </div>
       </div>
     </div>
   </div>
@@ -406,6 +443,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

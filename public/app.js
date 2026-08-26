@@ -3471,12 +3471,14 @@ class AudioFxController {
 const AudioFx = new AudioFxController();
 AudioFx.init();
 
-/* 5. Listen Together Live Room Sync Engine */
+/* 5. Listen Together Live Room Sync Engine (WebRTC P2P + Zero-Serverless-Lag) */
 class RoomSyncController {
   constructor() {
     this.roomId = null;
     this.isHost = false;
-    this.eventSource = null;
+    this.peer = null;
+    this.connections = [];
+    this.hostConn = null;
     this.lastSyncTime = 0;
   }
 
@@ -3486,125 +3488,238 @@ class RoomSyncController {
       const code = $('#join-room-input')?.value.trim();
       if (code) this.joinRoom(code);
     });
-    $('#btn-leave-room')?.addEventListener('click', () => this.leaveRoom());
+    $('#btn-leave-room-active')?.addEventListener('click', () => this.leaveRoom());
+    $('#btn-copy-room-code')?.addEventListener('click', () => {
+      if (this.roomId) {
+        navigator.clipboard.writeText(this.roomId).then(() => toast('Kode room disalin!'));
+      }
+    });
+    $('#btn-copy-room-link')?.addEventListener('click', () => {
+      if (this.roomId) {
+        const link = `${window.location.origin}/?room=${this.roomId}`;
+        navigator.clipboard.writeText(link).then(() => toast('Link undangan room disalin!'));
+      }
+    });
 
-    // Check deep link ?room=...
+    // Check URL deep link ?room=CODE
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     if (roomParam) {
-      setTimeout(() => this.joinRoom(roomParam), 1000);
+      setTimeout(() => {
+        this.joinRoom(roomParam);
+        openModalById('modal-room');
+      }, 800);
     }
   }
 
-  async createRoom() {
+  generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  createRoom() {
+    if (typeof Peer === 'undefined') {
+      toast('Memuat koneksi...');
+      return;
+    }
+    const code = this.generateRoomCode();
+    this.leaveRoom(true);
+
     try {
-      const res = await fetch('/api/room/create', { method: 'POST' });
-      const data = await res.json();
-      if (data.roomId) {
-        this.roomId = data.roomId;
+      this.peer = new Peer('fesify-room-' + code);
+      this.peer.on('open', () => {
+        this.roomId = code;
         this.isHost = true;
-        this.showStatusBadge(this.roomId, true);
-        this.connectEvents(this.roomId);
-        toast(`Room dibuat! Kode: ${this.roomId}`);
+        this.connections = [];
+        this.renderActiveView();
+        toast(`Room ${code} aktif! Siap disiarkan.`);
+        this.broadcastState();
+      });
 
-        if (Player.current) {
-          this.broadcastState();
+      this.peer.on('connection', (conn) => {
+        this.connections.push(conn);
+        this.updateListenerCount();
+        toast('Teman baru bergabung ke room kamu!');
+
+        conn.on('open', () => {
+          const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
+          const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
+          conn.send({
+            type: 'sync',
+            currentTrack: Player.current,
+            currentTime: curTime,
+            isPlaying,
+          });
+        });
+
+        conn.on('close', () => {
+          this.connections = this.connections.filter((c) => c !== conn);
+          this.updateListenerCount();
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        if (err && err.type === 'unavailable-id') {
+          setTimeout(() => this.createRoom(), 200);
+        } else {
+          toast('Koneksi room error');
         }
-      }
-    } catch (err) {
-      toast('Gagal membuat room');
+      });
+    } catch (e) {
+      toast('Gagal membuat room P2P');
     }
   }
 
-  async joinRoom(code) {
-    const cleanCode = code.toUpperCase();
-    try {
-      const res = await fetch(`/api/room/${cleanCode}/state`);
-      if (!res.ok) {
-        toast('Room tidak ditemukan');
-        return;
-      }
-      const state = await res.json();
-      this.roomId = cleanCode;
-      this.isHost = false;
-      this.showStatusBadge(cleanCode, false);
-      this.connectEvents(cleanCode);
-      toast(`Terhubung ke room ${cleanCode}`);
+  joinRoom(code) {
+    if (typeof Peer === 'undefined') {
+      toast('Sedang memuat sistem P2P...');
+      return;
+    }
+    const cleanCode = code.toUpperCase().trim();
+    if (!cleanCode) return;
+    this.leaveRoom(true);
 
-      if (state.currentTrack) {
-        playSong(state.currentTrack, [state.currentTrack], 0);
-        if (Player.yt && Player.ready && state.currentTime) {
-          Player.yt.seekTo(state.currentTime, true);
-        }
-      }
-    } catch (err) {
+    try {
+      this.peer = new Peer();
+      this.peer.on('open', () => {
+        this.hostConn = this.peer.connect('fesify-room-' + cleanCode);
+        
+        let connected = false;
+        this.hostConn.on('open', () => {
+          connected = true;
+          this.roomId = cleanCode;
+          this.isHost = false;
+          this.renderActiveView();
+          toast(`Terhubung ke room ${cleanCode}`);
+        });
+
+        this.hostConn.on('data', (data) => {
+          if (!data || data.type !== 'sync') return;
+          this.applySyncData(data);
+        });
+
+        this.hostConn.on('close', () => {
+          toast('Host telah menutup room');
+          this.leaveRoom();
+        });
+
+        setTimeout(() => {
+          if (!connected && !this.isHost && this.roomId !== cleanCode) {
+            toast('Room tidak ditemukan atau Host sedang offline');
+          }
+        }, 6000);
+      });
+
+      this.peer.on('error', () => {
+        toast('Room tidak ditemukan atau Host offline');
+      });
+    } catch (e) {
       toast('Gagal bergabung ke room');
     }
   }
 
-  connectEvents(roomId) {
-    if (this.eventSource) this.eventSource.close();
-    this.eventSource = new EventSource(`/api/room/${roomId}/events`);
-    this.eventSource.onmessage = (e) => {
-      if (this.isHost) return;
-      try {
-        const data = JSON.parse(e.data);
-        if (!data || !data.currentTrack) return;
+  applySyncData(data) {
+    if (!data.currentTrack) return;
 
-        if (!Player.current || Player.current.videoId !== data.currentTrack.videoId) {
-          playSong(data.currentTrack, [data.currentTrack], 0);
-        }
+    // 1. Play track if different
+    if (!Player.current || Player.current.videoId !== data.currentTrack.videoId) {
+      playSong(data.currentTrack, [data.currentTrack], 0);
+    }
 
-        if (Player.yt && Player.ready && typeof data.currentTime === 'number') {
-          const curTime = Player.yt.getCurrentTime() || 0;
-          if (Math.abs(curTime - data.currentTime) > 3) {
-            Player.yt.seekTo(data.currentTime, true);
-          }
-          if (data.isPlaying && Player.yt.getPlayerState() !== 1) {
-            Player.yt.playVideo();
-          } else if (!data.isPlaying && Player.yt.getPlayerState() === 1) {
-            Player.yt.pauseVideo();
-          }
-        }
-      } catch {}
-    };
+    // 2. Sync playback time & state
+    if (Player.yt && Player.ready && typeof data.currentTime === 'number') {
+      const curTime = Player.yt.getCurrentTime() || 0;
+      if (Math.abs(curTime - data.currentTime) > 2.5) {
+        Player.yt.seekTo(data.currentTime, true);
+      }
+      const isPlaying = Player.yt.getPlayerState() === 1;
+      if (data.isPlaying && !isPlaying) {
+        Player.yt.playVideo();
+      } else if (!data.isPlaying && isPlaying) {
+        Player.yt.pauseVideo();
+      }
+    }
   }
 
   broadcastState() {
-    if (!this.roomId || !this.isHost) return;
+    if (!this.roomId || !this.isHost || !this.connections.length) return;
     const now = Date.now();
-    if (now - this.lastSyncTime < 800) return;
+    if (now - this.lastSyncTime < 500) return;
     this.lastSyncTime = now;
 
     const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
     const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
 
-    fetch(`/api/room/${this.roomId}/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        currentTrack: Player.current,
-        currentTime: curTime,
-        isPlaying,
-      }),
-    }).catch(() => {});
+    const payload = {
+      type: 'sync',
+      currentTrack: Player.current,
+      currentTime: curTime,
+      isPlaying,
+    };
+
+    this.connections.forEach((conn) => {
+      try {
+        if (conn.open) conn.send(payload);
+      } catch {}
+    });
   }
 
-  showStatusBadge(roomId, isHost) {
-    const badge = $('#room-active-status');
-    const text = $('#room-status-text');
-    if (badge && text) {
-      badge.classList.remove('hidden');
-      text.innerHTML = `${isHost ? '👑 Host' : '🎧 Listener'} di Room: <b>${roomId}</b>`;
+  renderActiveView() {
+    const activeView = $('#room-active-view');
+    const idleView = $('#room-idle-view');
+    const codeText = $('#room-code-text');
+    const roleBadge = $('#room-role-badge');
+
+    if (activeView && idleView) {
+      activeView.classList.remove('hidden');
+      idleView.classList.add('hidden');
+    }
+    if (codeText) codeText.textContent = this.roomId;
+    if (roleBadge) {
+      roleBadge.textContent = this.isHost ? '👑 Kamu adalah Host' : '🎧 Kamu adalah Pendengar (Sync Aktif)';
+    }
+    this.updateListenerCount();
+  }
+
+  updateListenerCount() {
+    const countEl = $('#room-listeners-count');
+    if (!countEl) return;
+    if (this.isHost) {
+      const count = this.connections.length + 1;
+      countEl.textContent = `${count} Pengguna Terhubung`;
+    } else {
+      countEl.textContent = 'Tersinkron dengan Host';
     }
   }
 
-  leaveRoom() {
-    if (this.eventSource) this.eventSource.close();
+  leaveRoom(silent = false) {
+    if (this.hostConn) {
+      try { this.hostConn.close(); } catch {}
+      this.hostConn = null;
+    }
+    if (this.connections && this.connections.length) {
+      this.connections.forEach((c) => { try { c.close(); } catch {} });
+      this.connections = [];
+    }
+    if (this.peer) {
+      try { this.peer.destroy(); } catch {}
+      this.peer = null;
+    }
     this.roomId = null;
     this.isHost = false;
-    $('#room-active-status')?.classList.add('hidden');
-    toast('Keluar dari room');
+
+    const activeView = $('#room-active-view');
+    const idleView = $('#room-idle-view');
+    if (activeView && idleView) {
+      activeView.classList.add('hidden');
+      idleView.classList.remove('hidden');
+    }
+
+    if (!silent) toast('Keluar dari room');
   }
 }
 const RoomSync = new RoomSyncController();
