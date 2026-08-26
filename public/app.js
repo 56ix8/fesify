@@ -3480,6 +3480,14 @@ class RoomSyncController {
     this.connections = [];
     this.hostConn = null;
     this.lastSyncTime = 0;
+    this.pendingSeek = null;
+
+    // Heartbeat: Host broadcasts playback status every 1.5s to all guests
+    setInterval(() => {
+      if (this.isHost && this.roomId && this.connections.length > 0) {
+        this.broadcastState(true);
+      }
+    }, 1500);
   }
 
   init() {
@@ -3507,7 +3515,7 @@ class RoomSyncController {
     if (roomParam) {
       setTimeout(() => {
         this.joinRoom(roomParam);
-        openModalById('modal-room');
+        openRoomModal();
       }, 800);
     }
   }
@@ -3523,7 +3531,7 @@ class RoomSyncController {
 
   createRoom() {
     if (typeof Peer === 'undefined') {
-      toast('Memuat koneksi...');
+      toast('Memuat koneksi P2P...');
       return;
     }
     const code = this.generateRoomCode();
@@ -3537,7 +3545,7 @@ class RoomSyncController {
         this.connections = [];
         this.renderActiveView();
         toast(`Room ${code} aktif! Siap disiarkan.`);
-        this.broadcastState();
+        this.broadcastState(true);
       });
 
       this.peer.on('connection', (conn) => {
@@ -3546,14 +3554,13 @@ class RoomSyncController {
         toast('Teman baru bergabung ke room kamu!');
 
         conn.on('open', () => {
-          const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
-          const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
-          conn.send({
-            type: 'sync',
-            currentTrack: Player.current,
-            currentTime: curTime,
-            isPlaying,
-          });
+          this.sendStateToConn(conn);
+        });
+
+        conn.on('data', (msg) => {
+          if (msg && msg.type === 'get_state') {
+            this.sendStateToConn(conn);
+          }
         });
 
         conn.on('close', () => {
@@ -3572,6 +3579,19 @@ class RoomSyncController {
     } catch (e) {
       toast('Gagal membuat room P2P');
     }
+  }
+
+  sendStateToConn(conn) {
+    const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
+    const isPlaying = Player.yt && Player.ready ? (Player.yt.getPlayerState() === 1) : false;
+    try {
+      conn.send({
+        type: 'sync',
+        currentTrack: Player.current,
+        currentTime: curTime,
+        isPlaying,
+      });
+    } catch {}
   }
 
   joinRoom(code) {
@@ -3595,6 +3615,8 @@ class RoomSyncController {
           this.isHost = false;
           this.renderActiveView();
           toast(`Terhubung ke room ${cleanCode}`);
+          // Request instant state
+          try { this.hostConn.send({ type: 'get_state' }); } catch {}
         });
 
         this.hostConn.on('data', (data) => {
@@ -3623,21 +3645,30 @@ class RoomSyncController {
   }
 
   applySyncData(data) {
-    if (!data.currentTrack) return;
+    if (!data.currentTrack || !data.currentTrack.videoId) return;
 
-    // 1. Play track if different
-    if (!Player.current || Player.current.videoId !== data.currentTrack.videoId) {
+    // 1. Play track if different or nothing is playing
+    const needNewTrack = !Player.current || Player.current.videoId !== data.currentTrack.videoId;
+    if (needNewTrack) {
+      this.pendingSeek = typeof data.currentTime === 'number' ? data.currentTime : 0;
       playSong(data.currentTrack, [data.currentTrack], 0);
     }
 
-    // 2. Sync playback time & state
-    if (Player.yt && Player.ready && typeof data.currentTime === 'number') {
+    // 2. Continuous time & play/pause synchronization
+    if (Player.yt && Player.ready) {
       const curTime = Player.yt.getCurrentTime() || 0;
-      if (Math.abs(curTime - data.currentTime) > 2.5) {
+      const isPlaying = Player.yt.getPlayerState() === 1;
+
+      // Handle initial pending seek
+      if (this.pendingSeek !== null) {
+        Player.yt.seekTo(this.pendingSeek, true);
+        if (data.isPlaying) Player.yt.playVideo();
+        this.pendingSeek = null;
+      } else if (typeof data.currentTime === 'number' && Math.abs(curTime - data.currentTime) > 2) {
         Player.yt.seekTo(data.currentTime, true);
       }
-      const isPlaying = Player.yt.getPlayerState() === 1;
-      if (data.isPlaying && !isPlaying) {
+
+      if (data.isPlaying && !isPlaying && Player.yt.getPlayerState() !== 3) {
         Player.yt.playVideo();
       } else if (!data.isPlaying && isPlaying) {
         Player.yt.pauseVideo();
@@ -3645,10 +3676,10 @@ class RoomSyncController {
     }
   }
 
-  broadcastState() {
+  broadcastState(isHeartbeat = false) {
     if (!this.roomId || !this.isHost || !this.connections.length) return;
     const now = Date.now();
-    if (now - this.lastSyncTime < 500) return;
+    if (!isHeartbeat && (now - this.lastSyncTime < 400)) return;
     this.lastSyncTime = now;
 
     const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
@@ -3711,6 +3742,7 @@ class RoomSyncController {
     }
     this.roomId = null;
     this.isHost = false;
+    this.pendingSeek = null;
 
     const activeView = $('#room-active-view');
     const idleView = $('#room-idle-view');
