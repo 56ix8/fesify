@@ -561,8 +561,20 @@ html[data-theme="light"] .detail-head {
   display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center;
   padding: 0 16px; z-index: 40; gap: 16px;
   border-top: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  touch-action: pan-y;
+  will-change: transform, opacity;
 }
-#miniplayer.hidden { display: none; }
+#miniplayer.hidden { display: none !important; }
+.mini-close-btn {
+  opacity: 0.65;
+  transition: opacity 0.15s, transform 0.15s;
+  cursor: pointer;
+}
+.mini-close-btn:hover {
+  opacity: 1;
+  color: #ff5555;
+  transform: scale(1.1);
+}
 body.has-player #main, body.has-player #sidebar { margin-bottom: var(--player-h); }
 body.np-open.has-player #nowplaying { margin-bottom: var(--player-h); }
 

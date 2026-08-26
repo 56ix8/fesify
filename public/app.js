@@ -2488,6 +2488,92 @@ $('#mini-open').addEventListener('click', openNP);
 const openQueue = (e) => { e.stopPropagation(); openNowPlaying(); switchNPTab('queue'); };
 $('#mini-queue').addEventListener('click', openQueue);
 $('#mini-queue-m').addEventListener('click', openQueue);
+
+/* Close/Dismiss Player completely */
+function closePlayer(e) {
+  if (e) e.stopPropagation();
+  if (Player.yt && Player.ready) {
+    try { Player.yt.stopVideo(); } catch {}
+  }
+  Player.current = null;
+  Player.queue = [];
+  Player.index = -1;
+  Player.cued = false;
+  Player.pending = null;
+  localStorage.removeItem('smw_qstate');
+
+  $('#miniplayer')?.classList.add('hidden');
+  $('#nowplaying')?.classList.add('hidden');
+  document.body.classList.remove('has-player', 'np-open', 'paused');
+  document.title = 'Fesify';
+
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    } catch {}
+  }
+
+  if (typeof RoomSync !== 'undefined' && RoomSync.roomId) {
+    RoomSync.leaveRoom(true);
+  }
+
+  toast('Pemutar musik ditutup');
+}
+
+$('#mini-close')?.addEventListener('click', closePlayer);
+$('#mini-close-d')?.addEventListener('click', closePlayer);
+
+/* Swipe-down to dismiss mini player on mobile */
+(() => {
+  const mp = $('#miniplayer');
+  if (!mp) return;
+
+  let startY = 0;
+  let currentY = 0;
+  let isSwiping = false;
+
+  mp.addEventListener('touchstart', (e) => {
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    const touch = e.touches[0];
+    startY = touch.clientY;
+    currentY = startY;
+    isSwiping = true;
+    mp.style.transition = 'none';
+  }, { passive: true });
+
+  mp.addEventListener('touchmove', (e) => {
+    if (!isSwiping) return;
+    const touch = e.touches[0];
+    currentY = touch.clientY;
+    const diffY = currentY - startY;
+
+    if (diffY > 5) {
+      mp.style.transform = `translateY(${diffY}px)`;
+      mp.style.opacity = Math.max(0.2, 1 - (diffY / 100));
+    }
+  }, { passive: true });
+
+  mp.addEventListener('touchend', () => {
+    if (!isSwiping) return;
+    isSwiping = false;
+    mp.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+    const diffY = currentY - startY;
+
+    if (diffY > 35) {
+      mp.style.transform = 'translateY(120px)';
+      mp.style.opacity = '0';
+      setTimeout(() => {
+        mp.style.transform = '';
+        mp.style.opacity = '';
+        closePlayer();
+      }, 180);
+    } else {
+      mp.style.transform = '';
+      mp.style.opacity = '';
+    }
+  });
+})();
 /* shuffle / repeat on the bar (synced with Now Playing buttons) */
 $('#mini-shuffle').addEventListener('click', (e) => {
   e.stopPropagation();
