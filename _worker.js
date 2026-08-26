@@ -11,6 +11,8 @@ const CONTEXT = {
 };
 const HEADERS = {
   'Content-Type': 'application/json',
+  'X-YouTube-Client-Name': '67',
+  'X-YouTube-Client-Version': '1.20240101.00.00',
   Origin: 'https://music.youtube.com',
   Referer: 'https://music.youtube.com/',
   'User-Agent':
@@ -37,7 +39,10 @@ async function yt(endpoint, body = {}, query = '') {
     headers: HEADERS,
     body: JSON.stringify({ context: CONTEXT, ...body }),
   });
-  if (!res.ok) throw new Error('YTM ' + endpoint + ' -> ' + res.status);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error('YTM ' + endpoint + ' -> ' + res.status + ' (' + errText.slice(0, 150) + ')');
+  }
   return res.json();
 }
 
@@ -222,13 +227,7 @@ function displayTitle(t) {
     .trim() || raw;
 }
 
-export async function onRequest(context) {
-  const { request } = context;
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: CORS_HEADERS });
-  }
-
-  const url = new URL(request.url);
+async function handleApiRequest(request, url) {
   const path = url.pathname.replace(/^\/api\/?/, '');
 
   try {
