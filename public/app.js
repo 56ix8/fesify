@@ -1543,38 +1543,59 @@ function searchResultsHTML(sections) {
     return emptyHTML('No results', 'Try a different spelling or another artist, song, or playlist.', { ic: 'i-search' });
   }
   let html = '';
+  let topItem = null;
   const leftover = [];
   for (const sec of sections) {
     if (/^top result$/i.test(sec.title || '') && sec.items && sec.items[0]) {
-      html += topResultHTML(sec.items[0]);
+      topItem = sec.items[0];
       continue;
     }
     leftover.push(...(sec.items || []));
   }
-  if (sections.length === 1 && leftover.length && !/^top result$/i.test(sections[0].title || '')) {
-    const allCard = leftover.every(isSearchCard);
-    const allRow = leftover.every((i) => !isSearchCard(i));
-    if (allCard || allRow) {
-      html += allRow
-        ? `<div class="shelf"><div class="shelf-title">${esc(sections[0].title || 'Songs')}</div><div class="track-list">${leftover.map((i) => trackRowHTML(i)).join('')}</div></div>`
-        : `<div class="shelf"><div class="shelf-title">${esc(sections[0].title || 'Results')}</div>${carouselHTML(leftover.map(cardHTML).join(''))}</div>`;
-      return html;
-    }
-  }
+
   const groups = { song: [], video: [], album: [], artist: [], playlist: [], browse: [] };
   leftover.forEach((it) => {
     let t = it.type || (it.videoId ? 'song' : 'browse');
     if (!groups[t]) t = it.videoId ? 'song' : 'browse';
     groups[t].push(it);
   });
-  ['song', 'video', 'album', 'artist', 'playlist', 'browse'].forEach((t) => {
+
+  // Top Grid: Top Result on Left, Top 4 Songs on Right
+  const topSongs = groups.song.slice(0, 4);
+  const remainingSongs = groups.song.slice(4);
+
+  if (topItem && topSongs.length) {
+    html += `<div class="search-top-grid">
+      <div class="search-top-left">
+        <div class="shelf-title">Top result</div>
+        ${topResultHTML(topItem)}
+      </div>
+      <div class="search-top-right">
+        <div class="shelf-title">Songs</div>
+        <div class="track-list">${topSongs.map((i) => trackRowHTML(i)).join('')}</div>
+      </div>
+    </div>`;
+  } else if (topItem) {
+    html += `<div class="shelf"><div class="shelf-title">Top result</div><div style="max-width:380px;">${topResultHTML(topItem)}</div></div>`;
+  } else if (topSongs.length) {
+    html += `<div class="shelf"><div class="shelf-title">Songs</div><div class="track-list">${topSongs.map((i) => trackRowHTML(i)).join('')}</div></div>`;
+  }
+
+  // More Songs shelf
+  if (remainingSongs.length) {
+    html += `<div class="shelf"><div class="shelf-title">More Songs</div><div class="track-list">${remainingSongs.map((i) => trackRowHTML(i)).join('')}</div></div>`;
+  }
+
+  // Other categories: Videos, Albums, Artists, Playlists
+  ['video', 'album', 'artist', 'playlist', 'browse'].forEach((t) => {
     const items = groups[t];
     if (!items.length) return;
-    const title = SEARCH_TYPE_LABEL[t];
-    html += (t === 'song' || t === 'video')
-      ? `<div class="shelf"><div class="shelf-title">${title}</dijoin('')}</div></div>`
+    const title = SEARCH_TYPE_LABEL[t] || (t.charAt(0).toUpperCase() + t.slice(1));
+    html += (t === 'video')
+      ? `<div class="shelf"><div class="shelf-title">${title}</div><div class="track-list">${items.map((i) => trackRowHTML(i)).join('')}</div></div>`
       : `<div class="shelf"><div class="shelf-title">${title}</div>${carouselHTML(items.map(cardHTML).join(''))}</div>`;
   });
+
   return html || emptyHTML('No results', 'Try a different spelling or another artist, song, or playlist.', { ic: 'i-search' });
 }
 function relatedSectionsHTML(sections) {

@@ -534,6 +534,71 @@ html[data-theme="light"] .detail-head {
 .suggest button { text-align: left; padding: 10px 18px; border-radius: 6px; color: var(--muted); font-size: 14px; font-weight: 500; }
 .suggest button:hover { background: var(--hover-strong); color: var(--text); }
 
+/* search results grid & top result card */
+.search-top-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 28px;
+  margin-bottom: 32px;
+  align-items: stretch;
+}
+.search-top-left, .search-top-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sr-top {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  text-align: left;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s, transform 0.2s;
+  height: 100%;
+}
+.sr-top:hover {
+  background: var(--card-hover);
+  transform: translateY(-2px);
+}
+.sr-top img, .sr-top .art-ph-sr {
+  width: 104px;
+  height: 104px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-bottom: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.sr-top.artist img, .sr-top.artist .art-ph-sr {
+  border-radius: 50%;
+}
+.sr-kicker { display: none; }
+.sr-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--text);
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sr-sub {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.sr-top .pill-btn.primary {
+  align-self: flex-start;
+  padding: 10px 22px;
+  font-size: 13.5px;
+}
+
 /* mood grid */
 .mood-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
 .mood-card {
