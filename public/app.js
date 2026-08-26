@@ -3503,12 +3503,12 @@ class RoomSyncController {
     this.lastSyncTime = 0;
     this.pendingSeek = null;
 
-    // Heartbeat: Host publishes state every 2 seconds
+    // Heartbeat: Host publishes state every 1 second
     setInterval(() => {
       if (this.isHost && this.roomId && this.client && this.client.connected) {
         this.broadcastState(true);
       }
-    }, 2000);
+    }, 1000);
   }
 
   init() {
@@ -3635,10 +3635,8 @@ class RoomSyncController {
   applySyncData(data) {
     if (!data.currentTrack || !data.currentTrack.videoId) return;
 
-    // Latency compensation
-    const now = Date.now();
-    const elapsed = data.timestamp ? Math.max(0, (now - data.timestamp) / 1000) : 0;
-    const targetSeek = (typeof data.currentTime === 'number' ? data.currentTime : 0) + (data.isPlaying ? elapsed : 0);
+    // Direct Host Seek Time (avoids device clock skew)
+    const targetSeek = typeof data.currentTime === 'number' ? data.currentTime : 0;
 
     // 1. Play track if different or not playing
     const needNewTrack = !Player.current || Player.current.videoId !== data.currentTrack.videoId;
@@ -3666,7 +3664,8 @@ class RoomSyncController {
         Player.yt.seekTo(this.pendingSeek, true);
         if (data.isPlaying) Player.yt.playVideo();
         this.pendingSeek = null;
-      } else if (Math.abs(curTime - targetSeek) > 1.2) {
+      } else if (Math.abs(curTime - targetSeek) > 0.8) {
+        // Instant seek if drift > 0.8 seconds
         Player.yt.seekTo(targetSeek, true);
       }
 
@@ -3683,7 +3682,7 @@ class RoomSyncController {
     if (!Player.current || !Player.current.videoId) return;
 
     const now = Date.now();
-    if (!isHeartbeat && (now - this.lastSyncTime < 200)) return;
+    if (!isHeartbeat && (now - this.lastSyncTime < 150)) return;
     this.lastSyncTime = now;
 
     const curTime = Player.yt && Player.ready ? (Player.yt.getCurrentTime() || 0) : 0;
