@@ -20,13 +20,10 @@ Buat poster musik vertikal resolusi tinggi (1080×1920) dengan album art, lirik 
 ### 2. Spotify Playlist Importer
 Salin link playlist/album Spotify publik apa pun untuk langsung dipindahkan dan dicocokkan ke database Fesify dalam hitungan detik.
 
-### 3. Built-in Equalizer & Audio FX
-Atur 6-band frekuensi audio dengan preset studio (*Bass Boost*, *Vocal Booster*, *Treble Crisp*, *Electronic Club*) dan simulator tata suara panggung *8D Spatial Audio*.
-
-### 4. Listen Together (Live Sync Rooms)
+### 3. Listen Together (Live Sync Rooms)
 Buat room siaran musik dan bagikan kode room ke teman untuk mendengarkan lagu dan detik pemutaran yang sama secara real-time.
 
-### 5. PWA & Offline Caching
+### 4. PWA & Offline Caching
 Didukung Service Worker (`sw.js`) untuk akses instan dan dapat di-install langsung di HP (Android/iOS) maupun laptop/PC.
 
 ---
@@ -59,9 +56,12 @@ Buka **http://localhost:3000** di browser.
 ```
 fesify/
 ├── public/           # Frontend Web (HTML, CSS, Vanilla JS, Logos, SW)
-├── server.js         # Backend Express & YouTube Music Proxy / Rooms / Spotify Matcher
+├── lib/api.js        # Inti API: YouTube Music Proxy, Lirik, Spotify Matcher, Download (dipakai Express & Cloudflare)
+├── server.js         # Adapter Express (lokal & Vercel) + Rooms
 ├── api/index.js      # Serverless entry point untuk Vercel
 ├── vercel.json       # Konfigurasi routing Vercel
+├── _worker.js        # Adapter Cloudflare Workers
+├── wrangler.toml     # Konfigurasi Cloudflare Workers
 ├── package.json
 └── README.md
 ```

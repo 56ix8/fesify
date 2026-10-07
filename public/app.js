@@ -30,16 +30,91 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.add('hidden'), 2200);
 }
 
-function hueFrom(str) {
-  let h = 0;
-  const s = String(str || 'home');
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h) % 360;
+/* ================= spatial ambient + album accent =================
+   The blurred cover of the current song sits behind the whole app (#ambient),
+   and the cover's dominant hue becomes the UI accent via --acc-h / --acc-s.
+   Home's cover flow may preview its focused cover instead (Ambient.preview). */
+const Ambient = { src: '', front: 0, preview: null };
+function albumAccent(img) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, 64, 64);
+  const d = ctx.getImageData(0, 0, 64, 64).data;
+  // bucket vivid mid-tone pixels by hue; the bucket with the most total saturation wins
+  const buckets = Array.from({ length: 12 }, () => ({ n: 0, sat: 0, hues: [] }));
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+    if (!delta) continue;
+    const l = (max + min) / 2;
+    const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    if (s < 0.28 || l < 0.18 || l > 0.82) continue;
+    const h = 60 * (max === r ? (g - b) / delta + (g < b ? 6 : 0) : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4);
+    const bk = buckets[Math.floor(h / 30) % 12];
+    bk.n++; bk.sat += s; bk.hues.push(h);
+  }
+  const best = buckets.reduce((a, b) => (b.sat > a.sat ? b : a));
+  if (best.n < 40) return null; // mostly grey cover: keep the neutral accent
+  best.hues.sort((a, b) => a - b);
+  return {
+    h: Math.round(best.hues[best.hues.length >> 1]),
+    s: Math.round(Math.min(85, Math.max(55, (best.sat / best.n) * 100))),
+  };
 }
-function applyTint(key) {
-  document.documentElement.style.setProperty('--tint', hueFrom(key));
-  const main = $('#main');
-  if (main) main.style.setProperty('--tint', hueFrom(key));
+function setAccent(acc) {
+  const root = document.documentElement.style;
+  if (acc) {
+    root.setProperty('--acc-h', acc.h);
+    root.setProperty('--acc-s', acc.s + '%');
+  } else {
+    root.removeProperty('--acc-h');
+    root.removeProperty('--acc-s');
+  }
+}
+function refreshAmbient() {
+  // Now Playing always shows the playing song, even when opened over Home's cover flow
+  const npOpen = document.body.classList.contains('np-open');
+  applyAmbient((!npOpen && Ambient.preview) || Player.current);
+}
+// the bright accent as a plain hsl() string, for canvas drawing (CSS variables don't reach a canvas)
+function accentColor() {
+  const cs = getComputedStyle(document.documentElement);
+  const h = cs.getPropertyValue('--acc-h').trim() || '220';
+  const s = cs.getPropertyValue('--acc-s').trim() || '10%';
+  return `hsl(${h}, ${s}, 70%)`;
+}
+// YouTube's 4:3 video thumbnails (default/hq/sd) carry black bars around the 16:9 frame
+const isLetterboxed = (src) => /i\.ytimg\.com\/vi\/[^/]+\/(?:hq|sd)?default\.jpg/.test(src || '');
+function setAmbientPreview(item) {
+  Ambient.preview = item || null;
+  refreshAmbient();
+}
+function applyAmbient(song) {
+  const src = (song && song.thumbnail) || '';
+  if (src === Ambient.src) return;
+  Ambient.src = src;
+  const layers = $$('#ambient .amb-layer');
+  if (!src) {
+    layers.forEach((l) => l.classList.remove('on'));
+    setAccent(null);
+    return;
+  }
+  const next = layers[1 - Ambient.front];
+  next.onload = () => {
+    if (Ambient.src !== src) return;
+    layers[Ambient.front].classList.remove('on');
+    next.classList.add('on');
+    Ambient.front = 1 - Ambient.front;
+  };
+  next.src = src;
+  // read pixels through the same-origin thumb proxy so the canvas is not tainted
+  const probe = new Image();
+  probe.onload = () => {
+    if (Ambient.src !== src) return;
+    try { setAccent(albumAccent(probe)); } catch { setAccent(null); }
+  };
+  probe.src = src.startsWith('http') ? '/api/thumb?url=' + encodeURIComponent(src) : src;
 }
 function currentTheme() {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -59,6 +134,7 @@ function toggleTheme() {
 function openNowPlaying() {
   $('#nowplaying').classList.remove('hidden');
   document.body.classList.add('np-open');
+  refreshAmbient();
 }
 function closeNowPlaying() {
   Player.pending = null;
@@ -87,13 +163,12 @@ const Library = {
     else { f.unshift(song); toast('Added to favorites'); }
     store.set('fav', f);
     updateLikeButtons();
-    renderSidebarLibrary();
   },
   get playlists() { return store.get('pls', []); },
   createPlaylist(name) {
     const pls = this.playlists;
     const pl = { id: 'local_' + Date.now(), name, tracks: [] };
-    pls.unshift(pl); store.set('pls', pls); renderSidebarLibrary(); return pl;
+    pls.unshift(pl); store.set('pls', pls); return pl;
   },
   addToPlaylist(pid, song) {
     const pls = this.playlists;
@@ -109,7 +184,7 @@ const Library = {
     pl.tracks = pl.tracks.filter((t) => t.videoId !== vid);
     store.set('pls', pls);
   },
-  deletePlaylist(pid) { store.set('pls', this.playlists.filter((p) => p.id !== pid)); renderSidebarLibrary(); },
+  deletePlaylist(pid) { store.set('pls', this.playlists.filter((p) => p.id !== pid)); },
   renamePlaylist(pid, name) {
     const n = String(name || '').trim();
     if (!n) return;
@@ -118,7 +193,6 @@ const Library = {
     if (!pl) return;
     pl.name = n;
     store.set('pls', pls);
-    renderSidebarLibrary();
   },
   moveInPlaylist(pid, from, dir) {
     const pls = this.playlists;
@@ -138,7 +212,6 @@ const Library = {
     if (this.isSaved(item.browseId)) { sv = sv.filter((s) => s.browseId !== item.browseId); toast('Removed from library'); }
     else { sv.unshift(item); toast('Saved to library'); }
     store.set('sav', sv);
-    renderSidebarLibrary();
   },
   get history() { return store.get('hist', []); },
   pushHistory(song) {
@@ -425,7 +498,6 @@ function restoreQueue() {
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player', 'paused');
   document.title = `${s.title} • Fesify`;
-  applyTint(s.videoId || s.title);
   const shOn = Player.shuffle;
   $('#mini-shuffle') && $('#mini-shuffle').classList.toggle('on', shOn);
   $('#np-shuffle') && $('#np-shuffle').classList.toggle('on', shOn);
@@ -480,7 +552,6 @@ function startCurrent() {
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player');
   document.title = `${s.title} • Fesify`;
-  applyTint(s.videoId || s.title);
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: s.title, artist: s.artist || '',
@@ -785,6 +856,7 @@ function renderNowPlaying() {
   const np = Player.pending || Player.current;
   if (mini) {
     $('#mini-art').src = mini.thumbnail || '';
+    $('#mini-art').classList.toggle('lb', isLetterboxed(mini.thumbnail));
     const mt = $('#mini-title');
     const ma = $('#mini-artist');
     const title = displayTitle(mini.title) || mini.title || '';
@@ -795,8 +867,10 @@ function renderNowPlaying() {
     ma.title = artist;
     ma.classList.toggle('linkish', !!(songArtistBrowseId(mini) || artist.trim()));
   }
+  refreshAmbient();
   if (!np) return;
   $('#np-art').src = safeCover(np.thumbnail) || COVER_PH;
+  $('.np-art-wrap').classList.toggle('lb', isLetterboxed(np.thumbnail));
   $('#np-title').textContent = np.title;
   const artEl = $('#np-artist');
   artEl.textContent = np.artist || np.subtitle || '';
@@ -813,49 +887,6 @@ function updateLikeButtons() {
   $('#mini-like').classList.toggle('liked', !!miniLiked);
   $('#np-like').innerHTML = icon(npLiked ? 'i-heart-f' : 'i-heart-o') + `<span>${npLiked ? 'Favorited' : 'Favorite'}</span>`;
   $('#np-like').classList.toggle('liked', !!npLiked);
-  renderSidebarLibrary();
-}
-function renderSideQueue() {
-  const el = $('#side-queue');
-  const clr = $('#side-q-clear');
-  if (!el) return;
-  const n = userQueueCount();
-  if (clr) clr.classList.toggle('hidden', n === 0);
-  if (!Player.current) {
-    el.innerHTML = '<div class="sq-empty">Play a song, then tap the queue icon to add tracks here.</div>';
-    return;
-  }
-  const upcoming = [];
-  Player.queue.forEach((q, i) => { if (i > Player.index) upcoming.push({ q, i }); });
-  const user = upcoming.filter((x) => x.q._user);
-  const now = Player.current;
-  let html = `<div class="sq-sec">Now playing</div>
-    <button type="button" class="sq-row now" data-qi="${Player.index}">
-      ${coverHTML(now.thumbnail, 'sq')}
-      <span class="sq-meta"><span class="sq-t">${esc(now.title)}</span><br><span class="sq-s">${esc(now.artist || now.subtitle || '')}</span></span>
-    </button>`;
-  if (user.length) {
-    html += `<div class="sq-sec">Your queue · ${user.length}</div>`;
-    html += user.map(({ q, i }, n) => `<button type="button" class="sq-row" data-qi="${i}">
-      <span class="sq-n">${n + 1}</span>
-      ${coverHTML(q.thumbnail, 'sq')}
-      <span class="sq-meta"><span class="sq-t">${esc(q.title)}</span><br><span class="sq-s">${esc(q.artist || q.subtitle || '')}</span></span>
-    </button>`).join('');
-  } else {
-    html += `<div class="sq-empty">Your queue is empty. Tap ${icon('i-queue')} on a song.</div>`;
-  }
-  el.innerHTML = html;
-  $$('.sq-row', el).forEach((b) => b.addEventListener('click', () => {
-    const idx = Number(b.dataset.qi);
-    if (!Number.isFinite(idx) || idx < 0) return;
-    if (idx === Player.index) {
-      openNowPlaying();
-      switchNPTab('player');
-      return;
-    }
-    Player.index = idx;
-    startCurrent();
-  }));
 }
 function updateQueueTab() {
   const n = userQueueCount();
@@ -872,7 +903,6 @@ function updateQueueTab() {
 }
 function renderQueue() {
   updateQueueTab();
-  renderSideQueue();
   persistQueue();
   const el = $('#queue-list');
   if (!el) return;
@@ -1178,6 +1208,14 @@ function trackRowHTML(it, playing = false, extraBtn = '') {
 function trackHeadHTML() {
   return `<div class="track-head" aria-hidden="true"><span class="th-n">#</span><span class="th-t">Title</span><span class="th-d">Time</span></div>`;
 }
+/* dense track lists sit on one glass panel over the ambient */
+function trackPanelHTML(inner, noArt = false) {
+  return `<section class="track-panel${noArt ? ' no-art' : ''}" aria-label="Tracks">${inner}</section>`;
+}
+/* album / playlist layout: header beside the track panel on wide screens, stacked on narrow ones */
+function detailSplitHTML(head, tracks, noArt = false) {
+  return `<div class="detail-split">${head}${trackPanelHTML(tracks, noArt)}</div>`;
+}
 function quickCardHTML(it) {
   return `<button class="quick-card" data-item='${esc(JSON.stringify(it))}'>
     ${coverHTML(it.thumbnail, 'quick')}
@@ -1347,51 +1385,22 @@ const NAV = [
   { id: 'library', label: 'Library', icon: 'i-library', iconActive: 'i-library', hash: '#/library' },
 ];
 function renderNav() {
-  const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
-  // desktop sidebar: only Home + Search + Charts (Spotify layout); library lives in its own box
-  $('#nav-desktop').innerHTML = NAV.filter((n) => ['home', 'search', 'charts', 'room'].includes(n.id))
-    .map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
+  // same glass tab pill on desktop (topbar) and mobile (bottom); labels may collapse to icons, hence aria-label
+  const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" aria-label="${n.label}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
+  $('#nav-desktop').innerHTML = html;
   $('#nav-mobile').innerHTML = html;
-  renderSidebarLibrary();
 }
 function setActiveNav(id) {
   $$('.nav-item').forEach((el) => {
     const active = el.dataset.id === id;
     el.classList.toggle('active', active);
+    if (active) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
     const use = el.querySelector('use');
     if (use) use.setAttribute('href', '#' + (active ? el.dataset.ica : el.dataset.ic));
   });
 }
 
-/* ---- Your Library sidebar (Spotify left rail) ---- */
-function renderSidebarLibrary() {
-  const el = $('#lib-list');
-  if (!el) return;
-  const favs = Library.favorites;
-  const pls = Library.playlists;
-  const saved = Library.saved;
-  let html = '';
-  if (favs.length) {
-    html += `<button class="lib-row" data-nav="#/library/favorites">
-      <span class="lib-ph liked-ph">${icon('i-heart-f')}</span>
-      <span class="lr-meta"><span class="lr-t">Liked Songs</span><br><span class="lr-s">Playlist · ${favs.length} songs</span></span>
-    </button>`;
-  }
-  html += pls.map((p) => `<button class="lib-row" data-nav="#/localpl/${p.id}">
-      ${coverHTML(p.tracks[0] && p.tracks[0].thumbnail, 'lib')}
-      <span class="lr-meta"><span class="lr-t">${esc(p.name)}</span><br><span class="lr-s">Playlist · ${p.tracks.length} songs</span></span>
-    </button>`).join('');
-  html += saved.map((it) => `<button class="lib-row ${it.type === 'artist' ? 'round' : ''}" data-item='${esc(JSON.stringify(it))}'>
-      ${coverHTML(it.thumbnail, 'lib')}
-      <span class="lr-meta"><span class="lr-t">${esc(it.title)}</span><br><span class="lr-s">${it.type === 'artist' ? 'Artist' : it.type === 'album' ? 'Album' : 'Playlist'}</span></span>
-    </button>`).join('');
-  if (!html) html = `<div class="lib-empty"><b>Your library is empty</b><br>Like songs, save albums & artists, or open Library to create a playlist</div>`;
-  el.innerHTML = html;
-  $$('[data-nav]', el).forEach((b) => b.addEventListener('click', () => go(b.dataset.nav)));
-  $$('[data-item]', el).forEach((b) => b.addEventListener('click', () => {
-    try { openItem(JSON.parse(b.dataset.item)); } catch {}
-  }));
-}
 const go = (hash) => { location.hash = hash; };
 
 async function route() {
@@ -1404,7 +1413,8 @@ async function route() {
   $('#main').scrollTop = 0;
   view.classList.remove('view-enter');
   void view.offsetWidth;
-  applyTint(parts[0] || 'home');
+  // the cover flow preview only belongs to Home; elsewhere the ambient follows the playing song
+  if (parts[0] !== '' && parts[0] !== 'home') setAmbientPreview(null);
 
   try {
     if (parts[0] === '' || parts[0] === 'home') { setActiveNav('home'); await viewHome(view); }
@@ -1442,14 +1452,18 @@ async function viewHome(view) {
   const now = new Date();
   const h = now.getHours();
   const greet = h < 11 ? 'Good morning' : h < 16 ? 'Good afternoon' : 'Good evening';
-  applyTint(greet);
-  const d = await api('/api/home');
+  const [d, rel] = await Promise.all([
+    api('/api/home'),
+    api('/api/releases').catch(() => ({ items: [] })),
+  ]);
+  const releases = (rel && rel.items) || [];
   const hist = Library.history.slice(0, 16);
   const favs = Library.favorites.slice(0, 12);
   const pls = Library.playlists.filter((p) => p.tracks && p.tracks.length);
   const saved = Library.saved.slice(0, 12);
   const dateLine = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
   let html = `<div class="hello-row"><div><div class="greeting">${esc(dateLine)}</div><h1 class="page-title">${greet}</h1></div></div>`;
+  if (releases.length >= 3) html += coverFlowHTML(releases);
   if (hist.length) {
     html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
   }
@@ -1481,7 +1495,114 @@ async function viewHome(view) {
   view.innerHTML = html;
   bindItems(view);
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
+  if (releases.length >= 3) bindCoverFlow(view, releases);
+  else setAmbientPreview(null);
   loadMixForYou();
+}
+
+/* "New releases" cover flow — a 3D shelf of album covers (Apple Music visionOS style).
+   The focused cover drives the ambient and the accent while Home is open. */
+const CF_TILT = 42;
+// per distance from focus: [x offset in cover widths, tilt multiplier, scale, opacity, brightness]
+const CF_POS = [[0, 0, 1, 1, 1], [0.78, 1, 0.8, 1, 0.8], [1.3, 1.22, 0.66, 0.92, 0.64], [1.7, 1.36, 0.54, 0.55, 0.5]];
+function coverFlowHTML(items) {
+  return `<section class="cf" aria-label="New releases">
+    <div class="cf-eyebrow">New releases</div>
+    <div class="cf-stage" tabindex="0" aria-roledescription="carousel" aria-label="New releases. Use the left and right arrow keys to browse.">
+      ${items.map((it, i) => `<button type="button" class="cf-card" data-i="${i}" tabindex="-1" aria-label="${esc(it.title)}"><img src="${esc(it.thumbnail)}" alt="" draggable="false"></button>`).join('')}
+    </div>
+    <div class="cf-bar">
+      <button type="button" class="cf-arrow glass" data-dir="-1" aria-label="Previous release">${icon('i-back')}</button>
+      <div class="cf-caption glass">
+        <div class="cf-text"><div class="cf-title"></div><div class="cf-sub"></div></div>
+        <button type="button" class="cf-play" aria-label="Play">${icon('i-play')}</button>
+      </div>
+      <button type="button" class="cf-arrow glass" data-dir="1" aria-label="Next release">${icon('i-fwd')}</button>
+    </div>
+  </section>`;
+}
+function bindCoverFlow(root, items) {
+  const sec = $('.cf', root);
+  if (!sec) return;
+  const stage = $('.cf-stage', sec);
+  const cards = $$('.cf-card', sec);
+  let idx = Math.min(3, items.length - 1);
+  let ambTimer = 0;
+  const render = () => {
+    cards.forEach((card, i) => {
+      const d = i - idx;
+      const a = Math.abs(d);
+      const s = Math.sign(d);
+      const hidden = a > 3;
+      const [tx, tilt, scale, opacity, bright] = CF_POS[Math.min(a, 3)];
+      const x = hidden ? 2 * s : tx * s;
+      const rot = -s * CF_TILT * (hidden ? 1.45 : tilt);
+      card.style.transform = `translateX(calc(var(--u) * ${x})) rotateY(${rot}deg) scale(${hidden ? 0.42 : scale})`;
+      card.style.opacity = hidden ? 0 : opacity;
+      card.style.zIndex = 10 - Math.min(a, 9);
+      card.style.filter = `brightness(${hidden ? 0.4 : bright})`;
+      card.style.pointerEvents = hidden ? 'none' : '';
+      card.setAttribute('aria-current', i === idx ? 'true' : 'false');
+    });
+    const it = items[idx];
+    $('.cf-title', sec).textContent = it.title;
+    $('.cf-sub', sec).textContent = it.subtitle || '';
+    $('.cf-play', sec).setAttribute('aria-label', `Play ${it.title}`);
+    // let rapid browsing settle before crossfading the ambient
+    clearTimeout(ambTimer);
+    ambTimer = setTimeout(() => { if (sec.isConnected) setAmbientPreview(it); }, 140);
+  };
+  const goTo = (i) => {
+    const n = Math.max(0, Math.min(items.length - 1, i));
+    if (n !== idx) { idx = n; render(); }
+  };
+  let downX = null;
+  let swiped = false;
+  stage.addEventListener('pointerdown', (e) => { downX = e.clientX; swiped = false; });
+  stage.addEventListener('pointercancel', () => { downX = null; });
+  stage.addEventListener('pointerup', (e) => {
+    if (downX == null) return;
+    const dx = e.clientX - downX;
+    downX = null;
+    if (Math.abs(dx) < 36) return;
+    swiped = true;
+    goTo(idx + (dx < 0 ? 1 : -1) * (Math.abs(dx) > 180 ? 2 : 1));
+  });
+  // horizontal trackpad scroll; vertical wheel keeps scrolling the page
+  let wheelAt = 0;
+  stage.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    if (Date.now() - wheelAt < 280) return;
+    wheelAt = Date.now();
+    goTo(idx + (e.deltaX > 0 ? 1 : -1));
+  }, { passive: false });
+  stage.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(idx - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); goTo(idx + 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); openItem(items[idx]); }
+  });
+  cards.forEach((card, i) => card.addEventListener('click', () => {
+    if (swiped) { swiped = false; return; }
+    if (i === idx) openItem(items[i]);
+    else goTo(i);
+  }));
+  $$('.cf-arrow', sec).forEach((b) => b.addEventListener('click', () => goTo(idx + Number(b.dataset.dir))));
+  $('.cf-play', sec).addEventListener('click', () => playCollection(items[idx]));
+  render();
+}
+
+/* play an album/playlist straight from a cover (no detour through its page) */
+async function playCollection(it) {
+  try {
+    const d = await api(`/api/browse?id=${encodeURIComponent(it.browseId)}`);
+    const cover = (d.header && d.header.thumbnail) || it.thumbnail;
+    const queue = (d.tracks || []).filter((t) => t.videoId).map((t) => ({ ...songFromItem(t), thumbnail: t.thumbnail || cover }));
+    if (!queue.length) return openItem(it);
+    playSong(queue[0], queue, 0);
+  } catch {
+    toast('Could not load this release');
+  }
 }
 
 /* "Mix for you" — personalized-feel shelf built from your listening history (no account needed) */
@@ -1981,7 +2102,6 @@ function restoreLibrary() {
             updateQualityButton();
           }
         }
-        renderSidebarLibrary();
         toast('Library restored');
         closeModal();
         route();
@@ -2010,7 +2130,7 @@ function viewLocalPlaylist(view, pid) {
   const cover = safeCover(pl.tracks[0] && pl.tracks[0].thumbnail)
     ? `<img src="${esc(pl.tracks[0].thumbnail)}" alt="">`
     : `<div class="detail-ph">${icon('i-note')}</div>`;
-  view.innerHTML = `<div class="detail-head">
+  const head = `<div class="detail-head">
       ${cover}
       <div class="detail-info"><div class="detail-kicker">Playlist</div><h1>${esc(pl.name)}</h1><div class="sub">${pl.tracks.length} song${pl.tracks.length === 1 ? '' : 's'} · Local playlist</div>
       <div class="detail-actions">
@@ -2018,8 +2138,10 @@ function viewLocalPlaylist(view, pid) {
         <button class="pill-btn" id="pl-shuffle">${icon('i-shuffle')}<span>Shuffle</span></button>
         <button class="pill-btn" id="pl-rename">${icon('i-note')}<span>Rename</span></button>
         <button class="pill-btn" id="pl-del">${icon('i-trash')}<span>Delete</span></button>
-      </div></div></div>
-    ${rows ? trackHeadHTML() + `<div class="track-list">${rows}</div>` : emptyHTML('This playlist is empty', 'Open any song and tap Playlist to add it here.', { label: 'Find songs', go: '#/search', ic: 'i-note' })}`;
+      </div></div></div>`;
+  view.innerHTML = rows
+    ? detailSplitHTML(head, trackHeadHTML() + `<div class="track-list">${rows}</div>`)
+    : head + emptyHTML('This playlist is empty', 'Open any song and tap Playlist to add it here.', { label: 'Find songs', go: '#/search', ic: 'i-note' });
   bindItems(view);
   $$('.btn-rm', view).forEach((b) => b.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2075,12 +2197,12 @@ function viewLocalPlaylist(view, pid) {
 async function viewBrowse(view, id, kind, extraParams) {
   view.innerHTML = skeletonHTML;
   const d = await api(`/api/browse?id=${encodeURIComponent(id)}${extraParams ? '&params=' + encodeURIComponent(extraParams) : ''}`);
-  applyTint(id || kind);
   const h = d.header || { title: '', subtitle: '' };
   const kick = kind === 'artist' ? 'Artist' : kind === 'album' ? 'Album' : kind === 'playlist' ? 'Playlist' : 'Collection';
-  let html = '';
+  let head = '';
+  let tracks = '';
   if (h.title) {
-    html += `<div class="detail-head ${kind === 'artist' ? 'artist' : ''}">
+    head = `<div class="detail-head ${kind === 'artist' ? 'artist' : ''}">
       ${safeCover(h.thumbnail) ? `<img src="${esc(h.thumbnail)}" alt="">` : `<div class="detail-ph">${icon('i-note')}</div>`}
       <div class="detail-info"><div class="detail-kicker">${kick}</div><h1>${esc(h.title)}</h1>
         <div class="sub">${esc([h.strapline, h.subtitle].filter(Boolean).join(' • '))}${h.description ? `<br><span style="font-size:12.5px">${esc(h.description.slice(0, 260))}${h.description.length > 260 ? '…' : ''}</span>` : ''}</div>
@@ -2093,7 +2215,7 @@ async function viewBrowse(view, id, kind, extraParams) {
   if (d.tracks.length) {
     const headerArtist = (h.artists && h.artists[0] && h.artists[0].name) || h.strapline || '';
     const headerArtistId = (h.artists && h.artists[0] && h.artists[0].browseId) || '';
-    html += `${trackHeadHTML()}<div class="track-list">${d.tracks.map((t, i) => {
+    tracks = `${trackHeadHTML()}<div class="track-list">${d.tracks.map((t, i) => {
       const fromArr = (t.artists || []).map((a) => a.name).filter(Boolean).join(', ');
       const artist = t.artist || fromArr || headerArtist;
       return trackRowHTML({
@@ -2106,6 +2228,10 @@ async function viewBrowse(view, id, kind, extraParams) {
       });
     }).join('')}</div>`;
   }
+  // albums & playlists put the header beside the track panel; artists keep their header on top
+  // album tracks usually have no per-song art; their panel then shows numbers only
+  const noArt = d.tracks.length > 0 && d.tracks.every((t) => !safeCover(t.thumbnail));
+  let html = kind !== 'artist' && head && tracks ? detailSplitHTML(head, tracks, noArt) : head + (tracks ? trackPanelHTML(tracks, noArt) : '');
   html += (d.sections || []).map(shelfHTML).join('');
   view.innerHTML = html || emptyHTML('Nothing here', 'This page has no songs or related albums yet.', { label: 'Go home', go: '#/home', ic: 'i-note' });
   bindItems(view);
@@ -2530,6 +2656,7 @@ function closePlayer(e) {
   $('#miniplayer')?.classList.add('hidden');
   $('#nowplaying')?.classList.add('hidden');
   document.body.classList.remove('has-player', 'np-open', 'paused');
+  refreshAmbient();
   document.title = 'Fesify';
 
   if ('mediaSession' in navigator) {
@@ -2722,12 +2849,6 @@ document.addEventListener('keydown', (e) => {
 /* topbar back / forward (Spotify chrome) */
 $('#nav-back').addEventListener('click', () => history.back());
 $('#nav-fwd').addEventListener('click', () => history.forward());
-$('#lib-new').addEventListener('click', () => go('#/library'));
-$('#lib-title-btn').addEventListener('click', () => go('#/library'));
-const sideQBtn = $('#side-queue-btn');
-if (sideQBtn) sideQBtn.addEventListener('click', () => { openNowPlaying(); switchNPTab('queue'); });
-const sideQClr = $('#side-q-clear');
-if (sideQClr) sideQClr.addEventListener('click', (e) => { e.stopPropagation(); clearUserQueue(); });
 $('#miniplayer').addEventListener('click', (e) => {
   if (e.target.closest('button, input, .pb-bar, .pb-seek')) return;
   Player.pending = null;
@@ -3058,7 +3179,7 @@ function drawPipFrame() {
   let y = h / 2 - yOff - (activeBlock.h / 2);
   for (const b of blocks) {
     ctx.font = b.active ? '800 30px Figtree, Segoe UI, sans-serif' : '600 20px Figtree, Segoe UI, sans-serif';
-    ctx.fillStyle = b.active ? '#1ed760' : (b.i < idx ? 'rgba(255,255,255,0.40)' : 'rgba(255,255,255,0.26)');
+    ctx.fillStyle = b.active ? accentColor() : (b.i < idx ? 'rgba(255,255,255,0.40)' : 'rgba(255,255,255,0.26)');
     let ly = y + b.lh / 2;
     for (const t of b.wrapped) {
       ctx.fillText(t, w / 2, ly, maxW);
@@ -3178,10 +3299,8 @@ if ('serviceWorker' in navigator) {
   setTimeout(hide, 2800);
 })();
 renderNav();
-renderSideQueue();
 updateThemeIcon();
 $('#theme-toggle').addEventListener('click', toggleTheme);
-$('#tb-search').addEventListener('click', () => go('#/search'));
 $('#np-sb').classList.toggle('on', Player.sbEnabled);
 updateQualityButton();
 syncNpMore();
@@ -3195,7 +3314,7 @@ $('#np-volume').addEventListener('change', (e) => store.set('vol', Number(e.targ
 document.addEventListener('error', (e) => {
   const el = e.target;
   if (!el || el.tagName !== 'IMG') return;
-  if (el.classList.contains('logo-img') || el.closest('#splash')) return;
+  if (el.closest('.tb-brand') || el.closest('#splash') || el.closest('#ambient')) return;
   if (el.id === 'mini-art' || el.id === 'np-art' || el.id === 'fw-art') {
     if (el.src && !el.src.startsWith('data:')) el.src = COVER_PH;
     return;
@@ -3206,10 +3325,8 @@ document.addEventListener('error', (e) => {
   ph.className = 'art-ph';
   if (el.classList.contains('pl-pick-art')) ph.classList.add('pl-pick-ph');
   if (el.closest('.track')) ph.classList.add('art-ph-track');
-  else if (el.closest('.sq-row')) ph.classList.add('art-ph-sq');
   else if (el.closest('.quick-card')) ph.classList.add('art-ph-quick');
   else if (el.closest('.sr-top')) ph.classList.add('art-ph-sr');
-  else if (el.closest('.lib-row')) ph.classList.add('art-ph-lib');
   else if (el.closest('.sm-head')) ph.classList.add('art-ph-sm');
   else if (el.closest('.detail-head')) ph.classList.add('detail-ph');
   ph.innerHTML = icon('i-note');
@@ -3221,7 +3338,7 @@ restoreQueue();
 route();
 
 /* ==========================================================================
-   Fesify Flagship Features: Story Card, Spotify Importer, EQ & Room Sync
+   Fesify Flagship Features: Story Card, Spotify Importer & Room Sync
    ========================================================================== */
 
 /* 1. Modal Helper */
@@ -3382,7 +3499,7 @@ async function renderStoryCard(song) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#1ed760';
+    ctx.fillStyle = accentColor();
     ctx.font = '800 56px Figtree, sans-serif';
     ctx.fillText('♫', 160, 1460);
 
@@ -3412,7 +3529,7 @@ async function renderStoryCard(song) {
   const barGap = 16;
   const totalBarW = barCount * (barW + barGap);
   const startX = (w - totalBarW) / 2;
-  ctx.fillStyle = '#1ed760';
+  ctx.fillStyle = accentColor();
   for (let i = 0; i < barCount; i++) {
     const hBar = 16 + Math.sin(i * 0.8) * 24 + 20;
     ctx.roundRect(startX + i * (barW + barGap), 1830 - hBar, barW, hBar, 6);
@@ -3511,101 +3628,7 @@ $('#btn-run-spotify-import')?.addEventListener('click', async () => {
   }
 });
 
-/* 4. Equalizer & Studio Audio FX Engine */
-class AudioFxController {
-  constructor() {
-    this.frequencies = [60, 250, 1000, 4000, 8000, 16000];
-    this.bands = store.get('fesify_eq_bands', [0, 0, 0, 0, 0, 0]);
-    this.spatialOn = store.get('fesify_eq_spatial', false);
-    this.preset = store.get('fesify_eq_preset', 'flat');
-  }
-
-  init() {
-    this.bindUI();
-  }
-
-  bindUI() {
-    const sliders = [
-      $('#eq-b60'),
-      $('#eq-b250'),
-      $('#eq-b1k'),
-      $('#eq-b4k'),
-      $('#eq-b8k'),
-      $('#eq-b16k'),
-    ];
-
-    sliders.forEach((slider, idx) => {
-      if (!slider) return;
-      slider.value = this.bands[idx] || 0;
-      slider.addEventListener('input', (e) => {
-        this.bands[idx] = Number(e.target.value);
-        this.preset = 'custom';
-        this.updatePresetButtons();
-        this.save();
-      });
-    });
-
-    const spatialToggle = $('#eq-toggle-spatial');
-    if (spatialToggle) {
-      spatialToggle.checked = this.spatialOn;
-      spatialToggle.addEventListener('change', (e) => {
-        this.spatialOn = e.target.checked;
-        this.save();
-        toast(this.spatialOn ? '8D Spatial Simulator aktif' : '8D Spatial dimatikan');
-      });
-    }
-
-    $$('[data-eq-preset]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const p = btn.dataset.eqPreset;
-        this.applyPreset(p);
-      });
-    });
-
-    this.updatePresetButtons();
-  }
-
-  applyPreset(name) {
-    this.preset = name;
-    if (name === 'flat') this.bands = [0, 0, 0, 0, 0, 0];
-    else if (name === 'bass') this.bands = [8, 5, 2, 0, 0, -1];
-    else if (name === 'vocal') this.bands = [-2, 1, 5, 4, 2, 1];
-    else if (name === 'treble') this.bands = [-2, -1, 0, 3, 6, 8];
-    else if (name === 'club') this.bands = [6, 4, -1, 2, 4, 5];
-
-    const sliders = [
-      $('#eq-b60'),
-      $('#eq-b250'),
-      $('#eq-b1k'),
-      $('#eq-b4k'),
-      $('#eq-b8k'),
-      $('#eq-b16k'),
-    ];
-    sliders.forEach((s, i) => {
-      if (s) s.value = this.bands[i];
-    });
-
-    this.updatePresetButtons();
-    this.save();
-    toast(`Preset Equalizer: ${name.toUpperCase()}`);
-  }
-
-  updatePresetButtons() {
-    $$('[data-eq-preset]').forEach((b) => {
-      b.classList.toggle('active', b.dataset.eqPreset === this.preset);
-    });
-  }
-
-  save() {
-    store.set('fesify_eq_bands', this.bands);
-    store.set('fesify_eq_spatial', this.spatialOn);
-    store.set('fesify_eq_preset', this.preset);
-  }
-}
-const AudioFx = new AudioFxController();
-AudioFx.init();
-
-/* 5. Listen Together Live Room Sync Engine (Global Realtime MQTT PubSub) */
+/* 4. Listen Together Live Room Sync Engine (Global Realtime MQTT PubSub) */
 class RoomSyncController {
   constructor() {
     this.roomId = null;
@@ -3892,16 +3915,13 @@ function openRoomModal() {
   openModalById('modal-room');
 }
 
-/* 6. Wire Button Triggers */
+/* 5. Wire Button Triggers */
 $('#tb-room')?.addEventListener('click', openRoomModal);
-$('#tb-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-top-room')?.addEventListener('click', openRoomModal);
-$('#np-top-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-story')?.addEventListener('click', openStoryModal);
-$('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-room')?.addEventListener('click', openRoomModal);
 
-/* 7. Anti-Inspect & Source Obfuscation Protection Layer */
+/* 6. Anti-Inspect & Source Obfuscation Protection Layer */
 (() => {
   // Disable context menu (right-click) except on inputs
   document.addEventListener('contextmenu', (e) => {
