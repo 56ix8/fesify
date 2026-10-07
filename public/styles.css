@@ -300,6 +300,61 @@ a { color: inherit; }
 .hello-row .page-title { margin-bottom: 0; }
 .greeting { font-size: 13px; color: var(--muted); margin-bottom: 4px; font-weight: 600; text-transform: capitalize; }
 
+/* Home "New releases" cover flow (app.js bindCoverFlow sets each card's transform) */
+.cf { margin: 0 -24px 36px; overflow: clip; }
+.cf-eyebrow {
+  text-align: center; margin-bottom: 20px;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+}
+.cf-stage {
+  --u: clamp(190px, 25vw, 340px);
+  position: relative; height: calc(var(--u) * 1.02);
+  perspective: 1600px; touch-action: pan-y; user-select: none; outline: none;
+}
+.cf-card {
+  position: absolute; left: 50%; top: 0;
+  width: var(--u); height: var(--u); margin-left: calc(var(--u) / -2);
+  padding: 0; border-radius: 22px;
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s ease, filter 0.5s ease;
+}
+.cf-card img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background: var(--elevated);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+  outline: 1px solid rgba(255, 255, 255, 0.16); outline-offset: -1px;
+  -webkit-user-drag: none; pointer-events: none;
+}
+.cf-stage:focus-visible .cf-card[aria-current="true"] img { outline: 2px solid var(--text); outline-offset: 4px; }
+.cf-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 26px; padding: 0 24px; }
+.cf-arrow {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: var(--text);
+  transition: transform 0.15s;
+}
+.cf-arrow:hover { transform: scale(1.06); }
+.cf-arrow .ic { width: 18px; height: 18px; }
+.cf-caption {
+  display: flex; align-items: center; gap: 14px; min-width: 0; max-width: 520px;
+  padding: 7px 7px 7px 24px; border-radius: 999px;
+}
+.cf-text { min-width: 0; text-align: center; }
+.cf-title, .cf-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-title { font-size: 16px; font-weight: 700; }
+.cf-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.cf-play {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-bright); color: var(--on-accent);
+  transition: background 0.6s ease, transform 0.15s;
+}
+.cf-play:hover { transform: scale(1.06); }
+.cf-play .ic { width: 18px; height: 18px; }
+@media (max-width: 860px) {
+  .cf { margin: 0 -16px 28px; }
+  .cf-bar { padding: 0 16px; }
+  .cf-arrow { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .cf-card { transition: none; } }
+
 /* chips */
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
 .chip {

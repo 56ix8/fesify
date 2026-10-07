@@ -32,8 +32,9 @@ function toast(msg) {
 
 /* ================= spatial ambient + album accent =================
    The blurred cover of the current song sits behind the whole app (#ambient),
-   and the cover's dominant hue becomes the UI accent via --acc-h / --acc-s. */
-const Ambient = { src: '', front: 0 };
+   and the cover's dominant hue becomes the UI accent via --acc-h / --acc-s.
+   Home's cover flow may preview its focused cover instead (Ambient.preview). */
+const Ambient = { src: '', front: 0, preview: null };
 function albumAccent(img) {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -71,7 +72,14 @@ function setAccent(acc) {
     root.removeProperty('--acc-s');
   }
 }
-function updateAmbient(song) {
+function refreshAmbient() {
+  applyAmbient(Ambient.preview || Player.current);
+}
+function setAmbientPreview(item) {
+  Ambient.preview = item || null;
+  refreshAmbient();
+}
+function applyAmbient(song) {
   const src = (song && song.thumbnail) || '';
   if (src === Ambient.src) return;
   Ambient.src = src;
@@ -849,7 +857,7 @@ function renderNowPlaying() {
     ma.title = artist;
     ma.classList.toggle('linkish', !!(songArtistBrowseId(mini) || artist.trim()));
   }
-  updateAmbient(mini);
+  refreshAmbient();
   if (!np) return;
   $('#np-art').src = safeCover(np.thumbnail) || COVER_PH;
   $('#np-title').textContent = np.title;
@@ -1460,6 +1468,8 @@ async function route() {
   $('#main').scrollTop = 0;
   view.classList.remove('view-enter');
   void view.offsetWidth;
+  // the cover flow preview only belongs to Home; elsewhere the ambient follows the playing song
+  if (parts[0] !== '' && parts[0] !== 'home') setAmbientPreview(null);
 
   try {
     if (parts[0] === '' || parts[0] === 'home') { setActiveNav('home'); await viewHome(view); }
@@ -1497,13 +1507,18 @@ async function viewHome(view) {
   const now = new Date();
   const h = now.getHours();
   const greet = h < 11 ? 'Good morning' : h < 16 ? 'Good afternoon' : 'Good evening';
-  const d = await api('/api/home');
+  const [d, rel] = await Promise.all([
+    api('/api/home'),
+    api('/api/releases').catch(() => ({ items: [] })),
+  ]);
+  const releases = (rel && rel.items) || [];
   const hist = Library.history.slice(0, 16);
   const favs = Library.favorites.slice(0, 12);
   const pls = Library.playlists.filter((p) => p.tracks && p.tracks.length);
   const saved = Library.saved.slice(0, 12);
   const dateLine = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
   let html = `<div class="hello-row"><div><div class="greeting">${esc(dateLine)}</div><h1 class="page-title">${greet}</h1></div></div>`;
+  if (releases.length >= 3) html += coverFlowHTML(releases);
   if (hist.length) {
     html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
   }
@@ -1535,7 +1550,114 @@ async function viewHome(view) {
   view.innerHTML = html;
   bindItems(view);
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
+  if (releases.length >= 3) bindCoverFlow(view, releases);
+  else setAmbientPreview(null);
   loadMixForYou();
+}
+
+/* "New releases" cover flow — a 3D shelf of album covers (Apple Music visionOS style).
+   The focused cover drives the ambient and the accent while Home is open. */
+const CF_TILT = 42;
+// per distance from focus: [x offset in cover widths, tilt multiplier, scale, opacity, brightness]
+const CF_POS = [[0, 0, 1, 1, 1], [0.78, 1, 0.8, 1, 0.8], [1.3, 1.22, 0.66, 0.92, 0.64], [1.7, 1.36, 0.54, 0.55, 0.5]];
+function coverFlowHTML(items) {
+  return `<section class="cf" aria-label="New releases">
+    <div class="cf-eyebrow">New releases</div>
+    <div class="cf-stage" tabindex="0" aria-roledescription="carousel" aria-label="New releases. Use the left and right arrow keys to browse.">
+      ${items.map((it, i) => `<button type="button" class="cf-card" data-i="${i}" tabindex="-1" aria-label="${esc(it.title)}"><img src="${esc(it.thumbnail)}" alt="" draggable="false"></button>`).join('')}
+    </div>
+    <div class="cf-bar">
+      <button type="button" class="cf-arrow glass" data-dir="-1" aria-label="Previous release">${icon('i-back')}</button>
+      <div class="cf-caption glass">
+        <div class="cf-text"><div class="cf-title"></div><div class="cf-sub"></div></div>
+        <button type="button" class="cf-play" aria-label="Play">${icon('i-play')}</button>
+      </div>
+      <button type="button" class="cf-arrow glass" data-dir="1" aria-label="Next release">${icon('i-fwd')}</button>
+    </div>
+  </section>`;
+}
+function bindCoverFlow(root, items) {
+  const sec = $('.cf', root);
+  if (!sec) return;
+  const stage = $('.cf-stage', sec);
+  const cards = $$('.cf-card', sec);
+  let idx = Math.min(3, items.length - 1);
+  let ambTimer = 0;
+  const render = () => {
+    cards.forEach((card, i) => {
+      const d = i - idx;
+      const a = Math.abs(d);
+      const s = Math.sign(d);
+      const hidden = a > 3;
+      const [tx, tilt, scale, opacity, bright] = CF_POS[Math.min(a, 3)];
+      const x = hidden ? 2 * s : tx * s;
+      const rot = -s * CF_TILT * (hidden ? 1.45 : tilt);
+      card.style.transform = `translateX(calc(var(--u) * ${x})) rotateY(${rot}deg) scale(${hidden ? 0.42 : scale})`;
+      card.style.opacity = hidden ? 0 : opacity;
+      card.style.zIndex = 10 - Math.min(a, 9);
+      card.style.filter = `brightness(${hidden ? 0.4 : bright})`;
+      card.style.pointerEvents = hidden ? 'none' : '';
+      card.setAttribute('aria-current', i === idx ? 'true' : 'false');
+    });
+    const it = items[idx];
+    $('.cf-title', sec).textContent = it.title;
+    $('.cf-sub', sec).textContent = it.subtitle || '';
+    $('.cf-play', sec).setAttribute('aria-label', `Play ${it.title}`);
+    // let rapid browsing settle before crossfading the ambient
+    clearTimeout(ambTimer);
+    ambTimer = setTimeout(() => { if (sec.isConnected) setAmbientPreview(it); }, 140);
+  };
+  const goTo = (i) => {
+    const n = Math.max(0, Math.min(items.length - 1, i));
+    if (n !== idx) { idx = n; render(); }
+  };
+  let downX = null;
+  let swiped = false;
+  stage.addEventListener('pointerdown', (e) => { downX = e.clientX; swiped = false; });
+  stage.addEventListener('pointercancel', () => { downX = null; });
+  stage.addEventListener('pointerup', (e) => {
+    if (downX == null) return;
+    const dx = e.clientX - downX;
+    downX = null;
+    if (Math.abs(dx) < 36) return;
+    swiped = true;
+    goTo(idx + (dx < 0 ? 1 : -1) * (Math.abs(dx) > 180 ? 2 : 1));
+  });
+  // horizontal trackpad scroll; vertical wheel keeps scrolling the page
+  let wheelAt = 0;
+  stage.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    if (Date.now() - wheelAt < 280) return;
+    wheelAt = Date.now();
+    goTo(idx + (e.deltaX > 0 ? 1 : -1));
+  }, { passive: false });
+  stage.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(idx - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); goTo(idx + 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); openItem(items[idx]); }
+  });
+  cards.forEach((card, i) => card.addEventListener('click', () => {
+    if (swiped) { swiped = false; return; }
+    if (i === idx) openItem(items[i]);
+    else goTo(i);
+  }));
+  $$('.cf-arrow', sec).forEach((b) => b.addEventListener('click', () => goTo(idx + Number(b.dataset.dir))));
+  $('.cf-play', sec).addEventListener('click', () => playCollection(items[idx]));
+  render();
+}
+
+/* play an album/playlist straight from a cover (no detour through its page) */
+async function playCollection(it) {
+  try {
+    const d = await api(`/api/browse?id=${encodeURIComponent(it.browseId)}`);
+    const cover = (d.header && d.header.thumbnail) || it.thumbnail;
+    const queue = (d.tracks || []).filter((t) => t.videoId).map((t) => ({ ...songFromItem(t), thumbnail: t.thumbnail || cover }));
+    if (!queue.length) return openItem(it);
+    playSong(queue[0], queue, 0);
+  } catch {
+    toast('Could not load this release');
+  }
 }
 
 /* "Mix for you" — personalized-feel shelf built from your listening history (no account needed) */
@@ -2583,7 +2705,7 @@ function closePlayer(e) {
   $('#miniplayer')?.classList.add('hidden');
   $('#nowplaying')?.classList.add('hidden');
   document.body.classList.remove('has-player', 'np-open', 'paused');
-  updateAmbient(null);
+  refreshAmbient();
   document.title = 'Fesify';
 
   if ('mediaSession' in navigator) {
