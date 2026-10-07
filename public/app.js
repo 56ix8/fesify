@@ -3221,7 +3221,7 @@ restoreQueue();
 route();
 
 /* ==========================================================================
-   Fesify Flagship Features: Story Card, Spotify Importer, EQ & Room Sync
+   Fesify Flagship Features: Story Card, Spotify Importer & Room Sync
    ========================================================================== */
 
 /* 1. Modal Helper */
@@ -3511,101 +3511,7 @@ $('#btn-run-spotify-import')?.addEventListener('click', async () => {
   }
 });
 
-/* 4. Equalizer & Studio Audio FX Engine */
-class AudioFxController {
-  constructor() {
-    this.frequencies = [60, 250, 1000, 4000, 8000, 16000];
-    this.bands = store.get('fesify_eq_bands', [0, 0, 0, 0, 0, 0]);
-    this.spatialOn = store.get('fesify_eq_spatial', false);
-    this.preset = store.get('fesify_eq_preset', 'flat');
-  }
-
-  init() {
-    this.bindUI();
-  }
-
-  bindUI() {
-    const sliders = [
-      $('#eq-b60'),
-      $('#eq-b250'),
-      $('#eq-b1k'),
-      $('#eq-b4k'),
-      $('#eq-b8k'),
-      $('#eq-b16k'),
-    ];
-
-    sliders.forEach((slider, idx) => {
-      if (!slider) return;
-      slider.value = this.bands[idx] || 0;
-      slider.addEventListener('input', (e) => {
-        this.bands[idx] = Number(e.target.value);
-        this.preset = 'custom';
-        this.updatePresetButtons();
-        this.save();
-      });
-    });
-
-    const spatialToggle = $('#eq-toggle-spatial');
-    if (spatialToggle) {
-      spatialToggle.checked = this.spatialOn;
-      spatialToggle.addEventListener('change', (e) => {
-        this.spatialOn = e.target.checked;
-        this.save();
-        toast(this.spatialOn ? '8D Spatial Simulator aktif' : '8D Spatial dimatikan');
-      });
-    }
-
-    $$('[data-eq-preset]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const p = btn.dataset.eqPreset;
-        this.applyPreset(p);
-      });
-    });
-
-    this.updatePresetButtons();
-  }
-
-  applyPreset(name) {
-    this.preset = name;
-    if (name === 'flat') this.bands = [0, 0, 0, 0, 0, 0];
-    else if (name === 'bass') this.bands = [8, 5, 2, 0, 0, -1];
-    else if (name === 'vocal') this.bands = [-2, 1, 5, 4, 2, 1];
-    else if (name === 'treble') this.bands = [-2, -1, 0, 3, 6, 8];
-    else if (name === 'club') this.bands = [6, 4, -1, 2, 4, 5];
-
-    const sliders = [
-      $('#eq-b60'),
-      $('#eq-b250'),
-      $('#eq-b1k'),
-      $('#eq-b4k'),
-      $('#eq-b8k'),
-      $('#eq-b16k'),
-    ];
-    sliders.forEach((s, i) => {
-      if (s) s.value = this.bands[i];
-    });
-
-    this.updatePresetButtons();
-    this.save();
-    toast(`Preset Equalizer: ${name.toUpperCase()}`);
-  }
-
-  updatePresetButtons() {
-    $$('[data-eq-preset]').forEach((b) => {
-      b.classList.toggle('active', b.dataset.eqPreset === this.preset);
-    });
-  }
-
-  save() {
-    store.set('fesify_eq_bands', this.bands);
-    store.set('fesify_eq_spatial', this.spatialOn);
-    store.set('fesify_eq_preset', this.preset);
-  }
-}
-const AudioFx = new AudioFxController();
-AudioFx.init();
-
-/* 5. Listen Together Live Room Sync Engine (Global Realtime MQTT PubSub) */
+/* 4. Listen Together Live Room Sync Engine (Global Realtime MQTT PubSub) */
 class RoomSyncController {
   constructor() {
     this.roomId = null;
@@ -3892,16 +3798,13 @@ function openRoomModal() {
   openModalById('modal-room');
 }
 
-/* 6. Wire Button Triggers */
+/* 5. Wire Button Triggers */
 $('#tb-room')?.addEventListener('click', openRoomModal);
-$('#tb-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-top-room')?.addEventListener('click', openRoomModal);
-$('#np-top-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-story')?.addEventListener('click', openStoryModal);
-$('#np-eq')?.addEventListener('click', () => openModalById('modal-eq'));
 $('#np-room')?.addEventListener('click', openRoomModal);
 
-/* 7. Anti-Inspect & Source Obfuscation Protection Layer */
+/* 6. Anti-Inspect & Source Obfuscation Protection Layer */
 (() => {
   // Disable context menu (right-click) except on inputs
   document.addEventListener('contextmenu', (e) => {

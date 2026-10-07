@@ -20,13 +20,10 @@ Buat poster musik vertikal resolusi tinggi (1080×1920) dengan album art, lirik 
 ### 2. Spotify Playlist Importer
 Salin link playlist/album Spotify publik apa pun untuk langsung dipindahkan dan dicocokkan ke database Fesify dalam hitungan detik.
 
-### 3. Built-in Equalizer & Audio FX
-Atur 6-band frekuensi audio dengan preset studio (*Bass Boost*, *Vocal Booster*, *Treble Crisp*, *Electronic Club*) dan simulator tata suara panggung *8D Spatial Audio*.
-
-### 4. Listen Together (Live Sync Rooms)
+### 3. Listen Together (Live Sync Rooms)
 Buat room siaran musik dan bagikan kode room ke teman untuk mendengarkan lagu dan detik pemutaran yang sama secara real-time.
 
-### 5. PWA & Offline Caching
+### 4. PWA & Offline Caching
 Didukung Service Worker (`sw.js`) untuk akses instan dan dapat di-install langsung di HP (Android/iOS) maupun laptop/PC.
 
 ---

@@ -1402,7 +1402,7 @@ html[data-theme="light"] .modal-card .pl-form-input {
 }
 
 /* ==========================================================================
-   Fesify Flagship Feature Modals (Story, Spotify Import, EQ, Room Sync)
+   Fesify Flagship Feature Modals (Story, Spotify Import, Room Sync)
    ========================================================================== */
 
 .modal-overlay {
@@ -1493,70 +1493,7 @@ html[data-theme="light"] .modal-card .pl-form-input {
   cursor: pointer;
 }
 
-/* 2. Equalizer Modal */
-.eq-modal-card {
-  max-width: 460px;
-  width: 100%;
-}
-
-.eq-presets-row {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  margin-bottom: 20px;
-  padding-bottom: 4px;
-}
-
-.eq-sliders-grid {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 160px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  padding: 16px 12px;
-  margin-bottom: 16px;
-}
-
-.eq-band-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  height: 100%;
-}
-
-.eq-v-slider {
-  -webkit-appearance: slider-vertical;
-  width: 18px;
-  height: 100px;
-  cursor: pointer;
-  accent-color: var(--accent-bright);
-}
-
-.eq-band-col span {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.eq-extra-fx-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.eq-toggle-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* 3. Room Sync & Status Badge */
+/* 2. Room Sync & Status Badge */
 .room-status-badge {
   display: flex;
   align-items: center;
