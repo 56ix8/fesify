@@ -73,8 +73,19 @@ function setAccent(acc) {
   }
 }
 function refreshAmbient() {
-  applyAmbient(Ambient.preview || Player.current);
+  // Now Playing always shows the playing song, even when opened over Home's cover flow
+  const npOpen = document.body.classList.contains('np-open');
+  applyAmbient((!npOpen && Ambient.preview) || Player.current);
 }
+// the bright accent as a plain hsl() string, for canvas drawing (CSS variables don't reach a canvas)
+function accentColor() {
+  const cs = getComputedStyle(document.documentElement);
+  const h = cs.getPropertyValue('--acc-h').trim() || '220';
+  const s = cs.getPropertyValue('--acc-s').trim() || '10%';
+  return `hsl(${h}, ${s}, 70%)`;
+}
+// YouTube's 4:3 video thumbnails (default/hq/sd) carry black bars around the 16:9 frame
+const isLetterboxed = (src) => /i\.ytimg\.com\/vi\/[^/]+\/(?:hq|sd)?default\.jpg/.test(src || '');
 function setAmbientPreview(item) {
   Ambient.preview = item || null;
   refreshAmbient();
@@ -123,6 +134,7 @@ function toggleTheme() {
 function openNowPlaying() {
   $('#nowplaying').classList.remove('hidden');
   document.body.classList.add('np-open');
+  refreshAmbient();
 }
 function closeNowPlaying() {
   Player.pending = null;
@@ -151,13 +163,12 @@ const Library = {
     else { f.unshift(song); toast('Added to favorites'); }
     store.set('fav', f);
     updateLikeButtons();
-    renderSidebarLibrary();
   },
   get playlists() { return store.get('pls', []); },
   createPlaylist(name) {
     const pls = this.playlists;
     const pl = { id: 'local_' + Date.now(), name, tracks: [] };
-    pls.unshift(pl); store.set('pls', pls); renderSidebarLibrary(); return pl;
+    pls.unshift(pl); store.set('pls', pls); return pl;
   },
   addToPlaylist(pid, song) {
     const pls = this.playlists;
@@ -173,7 +184,7 @@ const Library = {
     pl.tracks = pl.tracks.filter((t) => t.videoId !== vid);
     store.set('pls', pls);
   },
-  deletePlaylist(pid) { store.set('pls', this.playlists.filter((p) => p.id !== pid)); renderSidebarLibrary(); },
+  deletePlaylist(pid) { store.set('pls', this.playlists.filter((p) => p.id !== pid)); },
   renamePlaylist(pid, name) {
     const n = String(name || '').trim();
     if (!n) return;
@@ -182,7 +193,6 @@ const Library = {
     if (!pl) return;
     pl.name = n;
     store.set('pls', pls);
-    renderSidebarLibrary();
   },
   moveInPlaylist(pid, from, dir) {
     const pls = this.playlists;
@@ -202,7 +212,6 @@ const Library = {
     if (this.isSaved(item.browseId)) { sv = sv.filter((s) => s.browseId !== item.browseId); toast('Removed from library'); }
     else { sv.unshift(item); toast('Saved to library'); }
     store.set('sav', sv);
-    renderSidebarLibrary();
   },
   get history() { return store.get('hist', []); },
   pushHistory(song) {
@@ -847,6 +856,7 @@ function renderNowPlaying() {
   const np = Player.pending || Player.current;
   if (mini) {
     $('#mini-art').src = mini.thumbnail || '';
+    $('#mini-art').classList.toggle('lb', isLetterboxed(mini.thumbnail));
     const mt = $('#mini-title');
     const ma = $('#mini-artist');
     const title = displayTitle(mini.title) || mini.title || '';
@@ -860,6 +870,7 @@ function renderNowPlaying() {
   refreshAmbient();
   if (!np) return;
   $('#np-art').src = safeCover(np.thumbnail) || COVER_PH;
+  $('.np-art-wrap').classList.toggle('lb', isLetterboxed(np.thumbnail));
   $('#np-title').textContent = np.title;
   const artEl = $('#np-artist');
   artEl.textContent = np.artist || np.subtitle || '';
@@ -876,49 +887,6 @@ function updateLikeButtons() {
   $('#mini-like').classList.toggle('liked', !!miniLiked);
   $('#np-like').innerHTML = icon(npLiked ? 'i-heart-f' : 'i-heart-o') + `<span>${npLiked ? 'Favorited' : 'Favorite'}</span>`;
   $('#np-like').classList.toggle('liked', !!npLiked);
-  renderSidebarLibrary();
-}
-function renderSideQueue() {
-  const el = $('#side-queue');
-  const clr = $('#side-q-clear');
-  if (!el) return;
-  const n = userQueueCount();
-  if (clr) clr.classList.toggle('hidden', n === 0);
-  if (!Player.current) {
-    el.innerHTML = '<div class="sq-empty">Play a song, then tap the queue icon to add tracks here.</div>';
-    return;
-  }
-  const upcoming = [];
-  Player.queue.forEach((q, i) => { if (i > Player.index) upcoming.push({ q, i }); });
-  const user = upcoming.filter((x) => x.q._user);
-  const now = Player.current;
-  let html = `<div class="sq-sec">Now playing</div>
-    <button type="button" class="sq-row now" data-qi="${Player.index}">
-      ${coverHTML(now.thumbnail, 'sq')}
-      <span class="sq-meta"><span class="sq-t">${esc(now.title)}</span><br><span class="sq-s">${esc(now.artist || now.subtitle || '')}</span></span>
-    </button>`;
-  if (user.length) {
-    html += `<div class="sq-sec">Your queue · ${user.length}</div>`;
-    html += user.map(({ q, i }, n) => `<button type="button" class="sq-row" data-qi="${i}">
-      <span class="sq-n">${n + 1}</span>
-      ${coverHTML(q.thumbnail, 'sq')}
-      <span class="sq-meta"><span class="sq-t">${esc(q.title)}</span><br><span class="sq-s">${esc(q.artist || q.subtitle || '')}</span></span>
-    </button>`).join('');
-  } else {
-    html += `<div class="sq-empty">Your queue is empty. Tap ${icon('i-queue')} on a song.</div>`;
-  }
-  el.innerHTML = html;
-  $$('.sq-row', el).forEach((b) => b.addEventListener('click', () => {
-    const idx = Number(b.dataset.qi);
-    if (!Number.isFinite(idx) || idx < 0) return;
-    if (idx === Player.index) {
-      openNowPlaying();
-      switchNPTab('player');
-      return;
-    }
-    Player.index = idx;
-    startCurrent();
-  }));
 }
 function updateQueueTab() {
   const n = userQueueCount();
@@ -935,7 +903,6 @@ function updateQueueTab() {
 }
 function renderQueue() {
   updateQueueTab();
-  renderSideQueue();
   persistQueue();
   const el = $('#queue-list');
   if (!el) return;
@@ -1241,6 +1208,14 @@ function trackRowHTML(it, playing = false, extraBtn = '') {
 function trackHeadHTML() {
   return `<div class="track-head" aria-hidden="true"><span class="th-n">#</span><span class="th-t">Title</span><span class="th-d">Time</span></div>`;
 }
+/* dense track lists sit on one glass panel over the ambient */
+function trackPanelHTML(inner, noArt = false) {
+  return `<section class="track-panel${noArt ? ' no-art' : ''}" aria-label="Tracks">${inner}</section>`;
+}
+/* album / playlist layout: header beside the track panel on wide screens, stacked on narrow ones */
+function detailSplitHTML(head, tracks, noArt = false) {
+  return `<div class="detail-split">${head}${trackPanelHTML(tracks, noArt)}</div>`;
+}
 function quickCardHTML(it) {
   return `<button class="quick-card" data-item='${esc(JSON.stringify(it))}'>
     ${coverHTML(it.thumbnail, 'quick')}
@@ -1414,7 +1389,6 @@ function renderNav() {
   const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" aria-label="${n.label}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
   $('#nav-desktop').innerHTML = html;
   $('#nav-mobile').innerHTML = html;
-  renderSidebarLibrary();
 }
 function setActiveNav(id) {
   $$('.nav-item').forEach((el) => {
@@ -1427,35 +1401,6 @@ function setActiveNav(id) {
   });
 }
 
-/* ---- Your Library sidebar (Spotify left rail) ---- */
-function renderSidebarLibrary() {
-  const el = $('#lib-list');
-  if (!el) return;
-  const favs = Library.favorites;
-  const pls = Library.playlists;
-  const saved = Library.saved;
-  let html = '';
-  if (favs.length) {
-    html += `<button class="lib-row" data-nav="#/library/favorites">
-      <span class="lib-ph liked-ph">${icon('i-heart-f')}</span>
-      <span class="lr-meta"><span class="lr-t">Liked Songs</span><br><span class="lr-s">Playlist · ${favs.length} songs</span></span>
-    </button>`;
-  }
-  html += pls.map((p) => `<button class="lib-row" data-nav="#/localpl/${p.id}">
-      ${coverHTML(p.tracks[0] && p.tracks[0].thumbnail, 'lib')}
-      <span class="lr-meta"><span class="lr-t">${esc(p.name)}</span><br><span class="lr-s">Playlist · ${p.tracks.length} songs</span></span>
-    </button>`).join('');
-  html += saved.map((it) => `<button class="lib-row ${it.type === 'artist' ? 'round' : ''}" data-item='${esc(JSON.stringify(it))}'>
-      ${coverHTML(it.thumbnail, 'lib')}
-      <span class="lr-meta"><span class="lr-t">${esc(it.title)}</span><br><span class="lr-s">${it.type === 'artist' ? 'Artist' : it.type === 'album' ? 'Album' : 'Playlist'}</span></span>
-    </button>`).join('');
-  if (!html) html = `<div class="lib-empty"><b>Your library is empty</b><br>Like songs, save albums & artists, or open Library to create a playlist</div>`;
-  el.innerHTML = html;
-  $$('[data-nav]', el).forEach((b) => b.addEventListener('click', () => go(b.dataset.nav)));
-  $$('[data-item]', el).forEach((b) => b.addEventListener('click', () => {
-    try { openItem(JSON.parse(b.dataset.item)); } catch {}
-  }));
-}
 const go = (hash) => { location.hash = hash; };
 
 async function route() {
@@ -2157,7 +2102,6 @@ function restoreLibrary() {
             updateQualityButton();
           }
         }
-        renderSidebarLibrary();
         toast('Library restored');
         closeModal();
         route();
@@ -2186,7 +2130,7 @@ function viewLocalPlaylist(view, pid) {
   const cover = safeCover(pl.tracks[0] && pl.tracks[0].thumbnail)
     ? `<img src="${esc(pl.tracks[0].thumbnail)}" alt="">`
     : `<div class="detail-ph">${icon('i-note')}</div>`;
-  view.innerHTML = `<div class="detail-head">
+  const head = `<div class="detail-head">
       ${cover}
       <div class="detail-info"><div class="detail-kicker">Playlist</div><h1>${esc(pl.name)}</h1><div class="sub">${pl.tracks.length} song${pl.tracks.length === 1 ? '' : 's'} · Local playlist</div>
       <div class="detail-actions">
@@ -2194,8 +2138,10 @@ function viewLocalPlaylist(view, pid) {
         <button class="pill-btn" id="pl-shuffle">${icon('i-shuffle')}<span>Shuffle</span></button>
         <button class="pill-btn" id="pl-rename">${icon('i-note')}<span>Rename</span></button>
         <button class="pill-btn" id="pl-del">${icon('i-trash')}<span>Delete</span></button>
-      </div></div></div>
-    ${rows ? trackHeadHTML() + `<div class="track-list">${rows}</div>` : emptyHTML('This playlist is empty', 'Open any song and tap Playlist to add it here.', { label: 'Find songs', go: '#/search', ic: 'i-note' })}`;
+      </div></div></div>`;
+  view.innerHTML = rows
+    ? detailSplitHTML(head, trackHeadHTML() + `<div class="track-list">${rows}</div>`)
+    : head + emptyHTML('This playlist is empty', 'Open any song and tap Playlist to add it here.', { label: 'Find songs', go: '#/search', ic: 'i-note' });
   bindItems(view);
   $$('.btn-rm', view).forEach((b) => b.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2253,9 +2199,10 @@ async function viewBrowse(view, id, kind, extraParams) {
   const d = await api(`/api/browse?id=${encodeURIComponent(id)}${extraParams ? '&params=' + encodeURIComponent(extraParams) : ''}`);
   const h = d.header || { title: '', subtitle: '' };
   const kick = kind === 'artist' ? 'Artist' : kind === 'album' ? 'Album' : kind === 'playlist' ? 'Playlist' : 'Collection';
-  let html = '';
+  let head = '';
+  let tracks = '';
   if (h.title) {
-    html += `<div class="detail-head ${kind === 'artist' ? 'artist' : ''}">
+    head = `<div class="detail-head ${kind === 'artist' ? 'artist' : ''}">
       ${safeCover(h.thumbnail) ? `<img src="${esc(h.thumbnail)}" alt="">` : `<div class="detail-ph">${icon('i-note')}</div>`}
       <div class="detail-info"><div class="detail-kicker">${kick}</div><h1>${esc(h.title)}</h1>
         <div class="sub">${esc([h.strapline, h.subtitle].filter(Boolean).join(' • '))}${h.description ? `<br><span style="font-size:12.5px">${esc(h.description.slice(0, 260))}${h.description.length > 260 ? '…' : ''}</span>` : ''}</div>
@@ -2268,7 +2215,7 @@ async function viewBrowse(view, id, kind, extraParams) {
   if (d.tracks.length) {
     const headerArtist = (h.artists && h.artists[0] && h.artists[0].name) || h.strapline || '';
     const headerArtistId = (h.artists && h.artists[0] && h.artists[0].browseId) || '';
-    html += `${trackHeadHTML()}<div class="track-list">${d.tracks.map((t, i) => {
+    tracks = `${trackHeadHTML()}<div class="track-list">${d.tracks.map((t, i) => {
       const fromArr = (t.artists || []).map((a) => a.name).filter(Boolean).join(', ');
       const artist = t.artist || fromArr || headerArtist;
       return trackRowHTML({
@@ -2281,6 +2228,10 @@ async function viewBrowse(view, id, kind, extraParams) {
       });
     }).join('')}</div>`;
   }
+  // albums & playlists put the header beside the track panel; artists keep their header on top
+  // album tracks usually have no per-song art; their panel then shows numbers only
+  const noArt = d.tracks.length > 0 && d.tracks.every((t) => !safeCover(t.thumbnail));
+  let html = kind !== 'artist' && head && tracks ? detailSplitHTML(head, tracks, noArt) : head + (tracks ? trackPanelHTML(tracks, noArt) : '');
   html += (d.sections || []).map(shelfHTML).join('');
   view.innerHTML = html || emptyHTML('Nothing here', 'This page has no songs or related albums yet.', { label: 'Go home', go: '#/home', ic: 'i-note' });
   bindItems(view);
@@ -2898,12 +2849,6 @@ document.addEventListener('keydown', (e) => {
 /* topbar back / forward (Spotify chrome) */
 $('#nav-back').addEventListener('click', () => history.back());
 $('#nav-fwd').addEventListener('click', () => history.forward());
-$('#lib-new').addEventListener('click', () => go('#/library'));
-$('#lib-title-btn').addEventListener('click', () => go('#/library'));
-const sideQBtn = $('#side-queue-btn');
-if (sideQBtn) sideQBtn.addEventListener('click', () => { openNowPlaying(); switchNPTab('queue'); });
-const sideQClr = $('#side-q-clear');
-if (sideQClr) sideQClr.addEventListener('click', (e) => { e.stopPropagation(); clearUserQueue(); });
 $('#miniplayer').addEventListener('click', (e) => {
   if (e.target.closest('button, input, .pb-bar, .pb-seek')) return;
   Player.pending = null;
@@ -3234,7 +3179,7 @@ function drawPipFrame() {
   let y = h / 2 - yOff - (activeBlock.h / 2);
   for (const b of blocks) {
     ctx.font = b.active ? '800 30px Figtree, Segoe UI, sans-serif' : '600 20px Figtree, Segoe UI, sans-serif';
-    ctx.fillStyle = b.active ? '#1ed760' : (b.i < idx ? 'rgba(255,255,255,0.40)' : 'rgba(255,255,255,0.26)');
+    ctx.fillStyle = b.active ? accentColor() : (b.i < idx ? 'rgba(255,255,255,0.40)' : 'rgba(255,255,255,0.26)');
     let ly = y + b.lh / 2;
     for (const t of b.wrapped) {
       ctx.fillText(t, w / 2, ly, maxW);
@@ -3354,7 +3299,6 @@ if ('serviceWorker' in navigator) {
   setTimeout(hide, 2800);
 })();
 renderNav();
-renderSideQueue();
 updateThemeIcon();
 $('#theme-toggle').addEventListener('click', toggleTheme);
 $('#np-sb').classList.toggle('on', Player.sbEnabled);
@@ -3370,7 +3314,7 @@ $('#np-volume').addEventListener('change', (e) => store.set('vol', Number(e.targ
 document.addEventListener('error', (e) => {
   const el = e.target;
   if (!el || el.tagName !== 'IMG') return;
-  if (el.classList.contains('logo-img') || el.closest('#splash') || el.closest('#ambient')) return;
+  if (el.closest('.tb-brand') || el.closest('#splash') || el.closest('#ambient')) return;
   if (el.id === 'mini-art' || el.id === 'np-art' || el.id === 'fw-art') {
     if (el.src && !el.src.startsWith('data:')) el.src = COVER_PH;
     return;
@@ -3381,10 +3325,8 @@ document.addEventListener('error', (e) => {
   ph.className = 'art-ph';
   if (el.classList.contains('pl-pick-art')) ph.classList.add('pl-pick-ph');
   if (el.closest('.track')) ph.classList.add('art-ph-track');
-  else if (el.closest('.sq-row')) ph.classList.add('art-ph-sq');
   else if (el.closest('.quick-card')) ph.classList.add('art-ph-quick');
   else if (el.closest('.sr-top')) ph.classList.add('art-ph-sr');
-  else if (el.closest('.lib-row')) ph.classList.add('art-ph-lib');
   else if (el.closest('.sm-head')) ph.classList.add('art-ph-sm');
   else if (el.closest('.detail-head')) ph.classList.add('detail-ph');
   ph.innerHTML = icon('i-note');
@@ -3557,7 +3499,7 @@ async function renderStoryCard(song) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#1ed760';
+    ctx.fillStyle = accentColor();
     ctx.font = '800 56px Figtree, sans-serif';
     ctx.fillText('♫', 160, 1460);
 
@@ -3587,7 +3529,7 @@ async function renderStoryCard(song) {
   const barGap = 16;
   const totalBarW = barCount * (barW + barGap);
   const startX = (w - totalBarW) / 2;
-  ctx.fillStyle = '#1ed760';
+  ctx.fillStyle = accentColor();
   for (let i = 0; i < barCount; i++) {
     const hBar = 16 + Math.sin(i * 0.8) * 24 + 20;
     ctx.roundRect(startX + i * (barW + barGap), 1830 - hBar, barW, hBar, 6);
