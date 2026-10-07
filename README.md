@@ -59,9 +59,12 @@ Buka **http://localhost:3000** di browser.
 ```
 fesify/
 ├── public/           # Frontend Web (HTML, CSS, Vanilla JS, Logos, SW)
-├── server.js         # Backend Express & YouTube Music Proxy / Rooms / Spotify Matcher
+├── lib/api.js        # Inti API: YouTube Music Proxy, Lirik, Spotify Matcher, Download (dipakai Express & Cloudflare)
+├── server.js         # Adapter Express (lokal & Vercel) + Rooms
 ├── api/index.js      # Serverless entry point untuk Vercel
 ├── vercel.json       # Konfigurasi routing Vercel
+├── _worker.js        # Adapter Cloudflare Workers
+├── wrangler.toml     # Konfigurasi Cloudflare Workers
 ├── package.json
 └── README.md
 ```
