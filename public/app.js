@@ -30,16 +30,72 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.add('hidden'), 2200);
 }
 
-function hueFrom(str) {
-  let h = 0;
-  const s = String(str || 'home');
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h) % 360;
+/* ================= spatial ambient + album accent =================
+   The blurred cover of the current song sits behind the whole app (#ambient),
+   and the cover's dominant hue becomes the UI accent via --acc-h / --acc-s. */
+const Ambient = { src: '', front: 0 };
+function albumAccent(img) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, 64, 64);
+  const d = ctx.getImageData(0, 0, 64, 64).data;
+  // bucket vivid mid-tone pixels by hue; the bucket with the most total saturation wins
+  const buckets = Array.from({ length: 12 }, () => ({ n: 0, sat: 0, hues: [] }));
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+    if (!delta) continue;
+    const l = (max + min) / 2;
+    const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    if (s < 0.28 || l < 0.18 || l > 0.82) continue;
+    const h = 60 * (max === r ? (g - b) / delta + (g < b ? 6 : 0) : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4);
+    const bk = buckets[Math.floor(h / 30) % 12];
+    bk.n++; bk.sat += s; bk.hues.push(h);
+  }
+  const best = buckets.reduce((a, b) => (b.sat > a.sat ? b : a));
+  if (best.n < 40) return null; // mostly grey cover: keep the neutral accent
+  best.hues.sort((a, b) => a - b);
+  return {
+    h: Math.round(best.hues[best.hues.length >> 1]),
+    s: Math.round(Math.min(85, Math.max(55, (best.sat / best.n) * 100))),
+  };
 }
-function applyTint(key) {
-  document.documentElement.style.setProperty('--tint', hueFrom(key));
-  const main = $('#main');
-  if (main) main.style.setProperty('--tint', hueFrom(key));
+function setAccent(acc) {
+  const root = document.documentElement.style;
+  if (acc) {
+    root.setProperty('--acc-h', acc.h);
+    root.setProperty('--acc-s', acc.s + '%');
+  } else {
+    root.removeProperty('--acc-h');
+    root.removeProperty('--acc-s');
+  }
+}
+function updateAmbient(song) {
+  const src = (song && song.thumbnail) || '';
+  if (src === Ambient.src) return;
+  Ambient.src = src;
+  const layers = $$('#ambient .amb-layer');
+  if (!src) {
+    layers.forEach((l) => l.classList.remove('on'));
+    setAccent(null);
+    return;
+  }
+  const next = layers[1 - Ambient.front];
+  next.onload = () => {
+    if (Ambient.src !== src) return;
+    layers[Ambient.front].classList.remove('on');
+    next.classList.add('on');
+    Ambient.front = 1 - Ambient.front;
+  };
+  next.src = src;
+  // read pixels through the same-origin thumb proxy so the canvas is not tainted
+  const probe = new Image();
+  probe.onload = () => {
+    if (Ambient.src !== src) return;
+    try { setAccent(albumAccent(probe)); } catch { setAccent(null); }
+  };
+  probe.src = src.startsWith('http') ? '/api/thumb?url=' + encodeURIComponent(src) : src;
 }
 function currentTheme() {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -425,7 +481,6 @@ function restoreQueue() {
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player', 'paused');
   document.title = `${s.title} • Fesify`;
-  applyTint(s.videoId || s.title);
   const shOn = Player.shuffle;
   $('#mini-shuffle') && $('#mini-shuffle').classList.toggle('on', shOn);
   $('#np-shuffle') && $('#np-shuffle').classList.toggle('on', shOn);
@@ -480,7 +535,6 @@ function startCurrent() {
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player');
   document.title = `${s.title} • Fesify`;
-  applyTint(s.videoId || s.title);
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: s.title, artist: s.artist || '',
@@ -795,6 +849,7 @@ function renderNowPlaying() {
     ma.title = artist;
     ma.classList.toggle('linkish', !!(songArtistBrowseId(mini) || artist.trim()));
   }
+  updateAmbient(mini);
   if (!np) return;
   $('#np-art').src = safeCover(np.thumbnail) || COVER_PH;
   $('#np-title').textContent = np.title;
@@ -1347,10 +1402,9 @@ const NAV = [
   { id: 'library', label: 'Library', icon: 'i-library', iconActive: 'i-library', hash: '#/library' },
 ];
 function renderNav() {
-  const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
-  // desktop sidebar: only Home + Search + Charts (Spotify layout); library lives in its own box
-  $('#nav-desktop').innerHTML = NAV.filter((n) => ['home', 'search', 'charts', 'room'].includes(n.id))
-    .map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
+  // same glass tab pill on desktop (topbar) and mobile (bottom); labels may collapse to icons, hence aria-label
+  const html = NAV.map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" aria-label="${n.label}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
+  $('#nav-desktop').innerHTML = html;
   $('#nav-mobile').innerHTML = html;
   renderSidebarLibrary();
 }
@@ -1358,6 +1412,8 @@ function setActiveNav(id) {
   $$('.nav-item').forEach((el) => {
     const active = el.dataset.id === id;
     el.classList.toggle('active', active);
+    if (active) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
     const use = el.querySelector('use');
     if (use) use.setAttribute('href', '#' + (active ? el.dataset.ica : el.dataset.ic));
   });
@@ -1404,7 +1460,6 @@ async function route() {
   $('#main').scrollTop = 0;
   view.classList.remove('view-enter');
   void view.offsetWidth;
-  applyTint(parts[0] || 'home');
 
   try {
     if (parts[0] === '' || parts[0] === 'home') { setActiveNav('home'); await viewHome(view); }
@@ -1442,7 +1497,6 @@ async function viewHome(view) {
   const now = new Date();
   const h = now.getHours();
   const greet = h < 11 ? 'Good morning' : h < 16 ? 'Good afternoon' : 'Good evening';
-  applyTint(greet);
   const d = await api('/api/home');
   const hist = Library.history.slice(0, 16);
   const favs = Library.favorites.slice(0, 12);
@@ -2075,7 +2129,6 @@ function viewLocalPlaylist(view, pid) {
 async function viewBrowse(view, id, kind, extraParams) {
   view.innerHTML = skeletonHTML;
   const d = await api(`/api/browse?id=${encodeURIComponent(id)}${extraParams ? '&params=' + encodeURIComponent(extraParams) : ''}`);
-  applyTint(id || kind);
   const h = d.header || { title: '', subtitle: '' };
   const kick = kind === 'artist' ? 'Artist' : kind === 'album' ? 'Album' : kind === 'playlist' ? 'Playlist' : 'Collection';
   let html = '';
@@ -2530,6 +2583,7 @@ function closePlayer(e) {
   $('#miniplayer')?.classList.add('hidden');
   $('#nowplaying')?.classList.add('hidden');
   document.body.classList.remove('has-player', 'np-open', 'paused');
+  updateAmbient(null);
   document.title = 'Fesify';
 
   if ('mediaSession' in navigator) {
@@ -3181,7 +3235,6 @@ renderNav();
 renderSideQueue();
 updateThemeIcon();
 $('#theme-toggle').addEventListener('click', toggleTheme);
-$('#tb-search').addEventListener('click', () => go('#/search'));
 $('#np-sb').classList.toggle('on', Player.sbEnabled);
 updateQualityButton();
 syncNpMore();
@@ -3195,7 +3248,7 @@ $('#np-volume').addEventListener('change', (e) => store.set('vol', Number(e.targ
 document.addEventListener('error', (e) => {
   const el = e.target;
   if (!el || el.tagName !== 'IMG') return;
-  if (el.classList.contains('logo-img') || el.closest('#splash')) return;
+  if (el.classList.contains('logo-img') || el.closest('#splash') || el.closest('#ambient')) return;
   if (el.id === 'mini-art' || el.id === 'np-art' || el.id === 'fw-art') {
     if (el.src && !el.src.startsWith('data:')) el.src = COVER_PH;
     return;
